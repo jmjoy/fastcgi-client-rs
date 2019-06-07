@@ -117,26 +117,45 @@ impl Params {
     pub fn create_params_map<'a>(
         request_method: &'a str,
         script_name: &'a str,
-    ) -> HashMap<&'a str, &'a str> {
-        let map = HashMap::new();
-        map
+        query_string: &'a str,
+        request_uri: &'a str,
+        document_uri: &'a str,
 
-        //        "GATEWAY_INTERFACE" => "FastCGI/1.0",
-        //        "REQUEST_METHOD"    => request_method,
-        //        "SCRIPT_FILENAME"   => script_name,
-        //        "SCRIPT_NAME"       => $req,
-        //        "QUERY_STRING"      => $url["query"],
-        //        "REQUEST_URI"       => $uri,
-        //        "DOCUMENT_URI"      => $req,
-        //        "SERVER_SOFTWARE"   => "php/fcgiclient",
-        //        "REMOTE_ADDR"       => "127.0.0.1",
-        //        "REMOTE_PORT"       => "9985",
-        //        "SERVER_ADDR"       => "127.0.0.1",
-        //        "SERVER_PORT"       => "80",
-        //        "SERVER_NAME"       => php_uname("n"),
-        //        "SERVER_PROTOCOL"   => "HTTP/1.1",
-        //        "CONTENT_TYPE"      => "",
-        //        "CONTENT_LENGTH"    => 0
+        remote_addr: &'a str,
+        remote_port: &'a str,
+        server_addr: &'a str,
+        server_port: &'a str,
+        server_name: &'a str,
+        server_protocol: &'a str,
+        content_type: &'a str,
+        content_length: &'a str,
+    ) -> HashMap<&'a str, &'a str> {
+        let mut map = HashMap::new();
+        map.insert("GATEWAY_INTERFACE", "FastCGI/1.0");
+        map.insert("GATEWAY_INTERFACE", "FastCGI/1.0");
+        map.insert("REQUEST_METHOD", request_method);
+        map.insert("SCRIPT_FILENAME", script_name);
+        map.insert("SCRIPT_NAME", script_name);
+        map.insert("QUERY_STRING", query_string);
+        map.insert("REQUEST_URI", request_uri);
+        map.insert("DOCUMENT_URI", document_uri);
+        map.insert("SERVER_SOFTWARE", "rust/fastcgi-client");
+        map.insert("REMOTE_ADDR", remote_addr);
+        map.insert("REMOTE_PORT", remote_port);
+        map.insert("SERVER_ADDR", server_addr);
+        map.insert("SERVER_PORT", server_port);
+        map.insert("SERVER_NAME", server_name);
+        map.insert(
+            "SERVER_PROTOCOL",
+            if server_protocol == "" {
+                "HTTP/1.1"
+            } else {
+                server_protocol
+            },
+        );
+        map.insert("CONTENT_TYPE", content_type);
+        map.insert("CONTENT_LENGTH", content_length);
+        map
     }
 }
 
