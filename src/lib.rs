@@ -1,4 +1,4 @@
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 use std::alloc::System;
 use std::cmp::min;
 use std::collections::HashMap;
@@ -34,12 +34,26 @@ const MAX_CONNS: &'static str = "MAX_CONNS";
 const MAX_REQS: &'static str = "MAX_REQS";
 const MPXS_CONNS: &'static str = "MPXS_CONNS";
 
-const HEADER_LEN: u8 = 8;
+const HEADER_LEN: usize = 8;
+
+pub trait ReadWrite: Read + Write {}
+
+impl<T> ReadWrite for T where T: Read + Write {}
 
 #[derive(Debug)]
 pub enum Address<'a> {
     Tcp(&'a str, u16),
     UnixSock(&'a str),
+}
+
+pub struct Response<'a> {
+    version: u8,
+    typ: u8,
+    request_id: u16,
+    content_length: u16,
+    padding_length: u8,
+    reserved: u8,
+    content: &'a [u8],
 }
 
 pub struct ClientBuilder<'a> {
@@ -193,7 +207,7 @@ impl<'a> Into<HashMap<&'a str, &'a str>> for Params<'a> {
 
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
-    stream: Box<Write>,
+    stream: Box<ReadWrite>,
 }
 
 impl<'a> Client<'a> {
@@ -230,6 +244,10 @@ impl<'a> Client<'a> {
         self.stream.write_all(&request_buf)?;
 
         Ok(id)
+    }
+
+    fn do_response(mut self, request_id: u16) -> Result<(), io::Error> {
+        Ok(())
     }
 
     fn generate_request_id() -> u16 {
@@ -280,4 +298,38 @@ impl<'a> Client<'a> {
 
         Ok(buf)
     }
+
+    fn read_packet<'b>(&mut self, response_buf: &'b mut [u8]) -> Result<Response<'b>, io::Error> {
+        let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
+        self.stream.read_exact(&mut buf)?;
+        let mut response = Self::decode_packet_header(&buf, response_buf)?;
+
+        if response.content_length > 0 {
+            let mut buf: Vec<u8> = vec![0; response.content_length as usize];
+            self.stream.read_exact(&mut buf)?;
+            response.content.write_all(&mut buf)?;
+        }
+        if response.padding_length > 0 {
+            let mut buf: Vec<u8> = vec![0; response.padding_length as usize];
+            self.stream.read_exact(&mut buf)?;
+            response.content.write_all(&mut buf)?;
+        }
+
+        Ok(response)
+    }
+
+    fn decode_packet_header<'b>(buf: &[u8; HEADER_LEN], response_buf: &'b [u8]) -> Result<Response<'b>, io::Error> {
+        let mut response = Response {
+            version: buf[0],
+            typ: buf[1],
+            request_id: (&buf[2..4]).read_u16::<BigEndian>()?,
+            content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
+            padding_length: buf[6],
+            reserved: buf[7],
+            content: response_buf,
+        };
+
+        Ok(response)
+    }
+
 }
