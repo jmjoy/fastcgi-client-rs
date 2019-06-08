@@ -1,5 +1,5 @@
 [package]
-name = "fastcgi-client-rs"
+name = "fastcgi-client"
 version = "0.1.0"
 authors = ["__JM_Joy__ <918734043@qq.com>"]
 edition = "2018"
