@@ -1,7 +1,10 @@
+use byteorder::{BigEndian, WriteBytesExt};
+use std::alloc::System;
+use std::cmp::min;
 use std::collections::HashMap;
-use std::io::{self, ErrorKind, Read};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::io::{self, ErrorKind, Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::{Duration, SystemTime};
 
 const VERSION_1: u8 = 1;
 
@@ -33,6 +36,7 @@ const MPXS_CONNS: &'static str = "MPXS_CONNS";
 
 const HEADER_LEN: u8 = 8;
 
+#[derive(Debug)]
 pub enum Address<'a> {
     Tcp(&'a str, u16),
     UnixSock(&'a str),
@@ -43,6 +47,7 @@ pub struct ClientBuilder<'a> {
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
+    keep_alive: bool,
 }
 
 impl<'a> ClientBuilder<'a> {
@@ -52,6 +57,7 @@ impl<'a> ClientBuilder<'a> {
             connect_timeout: Some(Duration::from_secs(30)),
             read_timeout: Some(Duration::from_secs(30)),
             write_timeout: Some(Duration::from_secs(30)),
+            keep_alive: false,
         }
     }
 
@@ -67,6 +73,15 @@ impl<'a> ClientBuilder<'a> {
 
     pub fn set_write_timeout(mut self, write_timeout: Option<Duration>) -> Self {
         self.write_timeout = write_timeout;
+        self
+    }
+
+    pub fn set_read_write_timeout(self, timeout: Option<Duration>) -> Self {
+        self.set_read_timeout(timeout).set_write_timeout(timeout)
+    }
+
+    pub fn set_keep_alive(mut self, keep_alive: bool) -> Self {
+        self.keep_alive = keep_alive;
         self
     }
 
@@ -94,27 +109,28 @@ impl<'a> ClientBuilder<'a> {
     }
 }
 
-pub struct Params {
-    //    gateway_interface: &'a str,
-//    request_method: &'a str,
-//    script_filename: &'a str,
-//    script_name: &'a str,
-//    query_string: &'a str,
-//    request_uri: &'a str,
-//    document_uri: &'a str,
-//    server_software: &'a str,
-//    remote_addr: &'a str,
-//    remote_port: &'a str,
-//    server_addr: &'a str,
-//    server_port: &'a str,
-//    server_name: &'a str,
-//    server_protocol: &'a str,
-//    content_type: &'a str,
-//    content_length: &'a str,
+#[derive(Default, Debug)]
+pub struct Params<'a> {
+    pub gateway_interface: &'a str,
+    pub request_method: &'a str,
+    pub script_filename: &'a str,
+    pub script_name: &'a str,
+    pub query_string: &'a str,
+    pub request_uri: &'a str,
+    pub document_uri: &'a str,
+    pub server_software: &'a str,
+    pub remote_addr: &'a str,
+    pub remote_port: &'a str,
+    pub server_addr: &'a str,
+    pub server_port: &'a str,
+    pub server_name: &'a str,
+    pub server_protocol: &'a str,
+    pub content_type: &'a str,
+    pub content_length: &'a str,
 }
 
-impl Params {
-    pub fn create_params_map<'a>(
+impl<'a> Params<'a> {
+    pub fn with(
         request_method: &'a str,
         script_name: &'a str,
         query_string: &'a str,
@@ -126,44 +142,142 @@ impl Params {
         server_addr: &'a str,
         server_port: &'a str,
         server_name: &'a str,
-        server_protocol: &'a str,
         content_type: &'a str,
         content_length: &'a str,
-    ) -> HashMap<&'a str, &'a str> {
+    ) -> Self {
+        let mut params: Params = Default::default();
+
+        params.request_method = request_method;
+        params.script_name = script_name;
+        params.query_string = query_string;
+        params.request_uri = request_uri;
+        params.document_uri = document_uri;
+        params.remote_addr = remote_addr;
+        params.remote_port = remote_port;
+        params.server_addr = server_addr;
+        params.server_port = server_port;
+        params.server_name = server_name;
+        params.content_type = content_type;
+        params.content_length = content_length;
+
+        params.gateway_interface = "FastCGI/1.0";
+        params.server_software = "rust/fastcgi-client";
+        params.server_protocol = "HTTP/1.1";
+
+        params
+    }
+}
+
+impl<'a> Into<HashMap<&'a str, &'a str>> for Params<'a> {
+    fn into(self) -> HashMap<&'a str, &'a str> {
         let mut map = HashMap::new();
-        map.insert("GATEWAY_INTERFACE", "FastCGI/1.0");
-        map.insert("GATEWAY_INTERFACE", "FastCGI/1.0");
-        map.insert("REQUEST_METHOD", request_method);
-        map.insert("SCRIPT_FILENAME", script_name);
-        map.insert("SCRIPT_NAME", script_name);
-        map.insert("QUERY_STRING", query_string);
-        map.insert("REQUEST_URI", request_uri);
-        map.insert("DOCUMENT_URI", document_uri);
-        map.insert("SERVER_SOFTWARE", "rust/fastcgi-client");
-        map.insert("REMOTE_ADDR", remote_addr);
-        map.insert("REMOTE_PORT", remote_port);
-        map.insert("SERVER_ADDR", server_addr);
-        map.insert("SERVER_PORT", server_port);
-        map.insert("SERVER_NAME", server_name);
-        map.insert(
-            "SERVER_PROTOCOL",
-            if server_protocol == "" {
-                "HTTP/1.1"
-            } else {
-                server_protocol
-            },
-        );
-        map.insert("CONTENT_TYPE", content_type);
-        map.insert("CONTENT_LENGTH", content_length);
+        map.insert("GATEWAY_INTERFACE", self.gateway_interface);
+        map.insert("REQUEST_METHOD", self.request_method);
+        map.insert("SCRIPT_FILENAME", self.script_name);
+        map.insert("SCRIPT_NAME", self.script_name);
+        map.insert("QUERY_STRING", self.query_string);
+        map.insert("REQUEST_URI", self.request_uri);
+        map.insert("DOCUMENT_URI", self.document_uri);
+        map.insert("SERVER_SOFTWARE", self.server_software);
+        map.insert("REMOTE_ADDR", self.remote_addr);
+        map.insert("REMOTE_PORT", self.remote_port);
+        map.insert("SERVER_ADDR", self.server_addr);
+        map.insert("SERVER_PORT", self.server_port);
+        map.insert("SERVER_NAME", self.server_name);
+        map.insert("SERVER_PROTOCOL", self.server_protocol);
+        map.insert("CONTENT_TYPE", self.content_type);
+        map.insert("CONTENT_LENGTH", self.content_length);
         map
     }
 }
 
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
-    stream: Box<Read>,
+    stream: Box<Write>,
 }
 
 impl<'a> Client<'a> {
-    pub fn request() {}
+    pub fn request(self, params: Params, input: &mut Read) -> Result<(), io::Error> {
+        let id = self.do_request(params, input)?;
+        dbg!(id);
+        Ok(())
+    }
+
+    fn do_request(mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
+        let id = Self::generate_request_id();
+        let keep_alive = self.builder.keep_alive as u8;
+        let mut request_buf = Self::build_packet(
+            BEGIN_REQUEST,
+            &vec![0, RESPONDER, keep_alive, 0, 0, 0, 0, 0],
+            id,
+        )?;
+        let mut params_buf: Vec<u8> = Vec::new();
+        let params: HashMap<&'a str, &'a str> = params.into();
+        for (k, v) in params {
+            params_buf.write_all(&Self::build_nv_pair(k, v)?);
+        }
+        if params_buf.len() > 0 {
+            request_buf.write_all(&params_buf)?;
+        }
+
+        let mut input_buf: Vec<u8> = Vec::new();
+        io::copy(input, &mut input_buf)?;
+        if input_buf.len() > 0 {
+            request_buf.write_all(&Self::build_packet(STDIN, &input_buf, id)?)?;
+        }
+        request_buf.write_all(&Self::build_packet(STDIN, &vec![], id)?)?;
+
+        self.stream.write_all(&request_buf)?;
+
+        Ok(id)
+    }
+
+    fn generate_request_id() -> u16 {
+        match SystemTime::now().elapsed() {
+            Ok(duration) => (duration.as_secs() % 65535) as u16 + 1,
+            Err(_) => 1,
+        }
+    }
+
+    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, io::Error> {
+        let len = content.len();
+        // TODO Now just limit 2^16 lengths content, I will optimize it later version.
+        let len = min(len, 65535) as u16;
+
+        let mut buf: Vec<u8> = Vec::new();
+        buf.push(VERSION_1);
+        buf.push(typ);
+        buf.write_u16::<BigEndian>(request_id)?;
+        buf.write_u16::<BigEndian>(len)?;
+        buf.push(0);
+        buf.push(0);
+        buf.write_all(&content[..len as usize])?;
+        Ok(buf)
+    }
+
+    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, io::Error> {
+        let mut buf = Vec::new();
+
+        let mut n_len = name.len() as u32;
+        let mut v_len = value.len() as u32;
+
+        if n_len < 128 {
+            buf.write_u8(n_len as u8)?;
+        } else {
+            n_len |= 1 << 31;
+            buf.write_u32::<BigEndian>(n_len)?;
+        }
+
+        if v_len < 128 {
+            buf.write_u8(v_len as u8)?;
+        } else {
+            v_len |= 1 << 31;
+            buf.write_u32::<BigEndian>(v_len)?;
+        }
+
+        buf.write_all(name.as_bytes())?;
+        buf.write_all(value.as_bytes())?;
+
+        Ok(buf)
+    }
 }
