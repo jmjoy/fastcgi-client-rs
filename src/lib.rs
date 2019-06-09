@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, SystemTime};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 const VERSION_1: u8 = 1;
 
@@ -46,14 +48,15 @@ pub enum Address<'a> {
     UnixSock(&'a str),
 }
 
-pub struct Response<'a> {
+#[derive(Debug)]
+pub struct Response {
     version: u8,
     typ: u8,
     request_id: u16,
     content_length: u16,
     padding_length: u8,
     reserved: u8,
-    content: &'a mut [u8],
+    content: Rc<RefCell<Vec<u8>>>,
 }
 
 pub struct ClientBuilder<'a> {
@@ -120,7 +123,7 @@ impl<'a> ClientBuilder<'a> {
         Ok(Client {
             builder: self,
             stream: Box::new(stream),
-            response_buf: Vec::new(),
+            response_buf: Rc::new(RefCell::new(Vec::new())),
         })
     }
 }
@@ -210,11 +213,11 @@ impl<'a> Into<HashMap<&'a str, &'a str>> for Params<'a> {
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
     stream: Box<ReadWrite>,
-    response_buf: Vec<u8>,
+    response_buf: Rc<RefCell<Vec<u8>>>,
 }
 
 impl<'a> Client<'a> {
-    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Response<'a>, io::Error> {
+    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Response, io::Error> {
         let id = self.do_request(params, input)?;
         self.do_response(id)
     }
@@ -248,7 +251,7 @@ impl<'a> Client<'a> {
         Ok(id)
     }
 
-    fn do_response(&mut self, request_id: u16) -> Result<Response<'a>, io::Error> {
+    fn do_response(&mut self, request_id: u16) -> Result<Response, io::Error> {
         let response = self.read_packet()?;
 
         match response.typ {
@@ -257,7 +260,7 @@ impl<'a> Client<'a> {
             _ => {}
         }
 
-        match response.content[4] {
+        match response.content.clone().borrow()[4] {
             CANT_MPX_CONN => Err(io::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
             OVERLOADED => Err(io::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
             UNKNOWN_ROLE => Err(io::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
@@ -315,7 +318,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet(&mut self) -> Result<Response<'a>, io::Error> {
+    fn read_packet(&mut self) -> Result<Response, io::Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
         let mut response = self.decode_packet_header(&buf)?;
@@ -323,18 +326,18 @@ impl<'a> Client<'a> {
         if response.content_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.content_length as usize];
             self.stream.read_exact(&mut buf)?;
-            response.content.write_all(&mut buf)?;
+            response.content.borrow_mut().write_all(&mut buf)?;
         }
         if response.padding_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.padding_length as usize];
             self.stream.read_exact(&mut buf)?;
-            response.content.write_all(&mut buf)?;
+            response.content.borrow_mut().write_all(&mut buf)?;
         }
 
         Ok(response)
     }
 
-    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response<'a>, io::Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, io::Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
@@ -342,7 +345,7 @@ impl<'a> Client<'a> {
             content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
             padding_length: buf[6],
             reserved: buf[7],
-            content: &mut self.response_buf,
+            content: Rc::clone(&self.response_buf),
         };
 
         Ok(response)

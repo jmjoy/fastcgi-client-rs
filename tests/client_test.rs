@@ -3,7 +3,7 @@ use std::io;
 
 #[test]
 fn test_client() {
-    ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
+    let response = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
         .build()
         .unwrap()
         .request(Params::with(
@@ -19,5 +19,6 @@ fn test_client() {
             "",
             "0",
         ), &mut io::empty());
-    assert_eq!("hello", "hello");
+
+    dbg!(response);
 }
