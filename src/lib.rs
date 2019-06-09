@@ -216,7 +216,7 @@ pub struct Client<'a> {
 impl<'a> Client<'a> {
     pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Response<'a>, io::Error> {
         let id = self.do_request(params, input)?;
-        self.do_response(id, &mut self.response_buf)
+        self.do_response(id)
     }
 
     fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
@@ -248,8 +248,8 @@ impl<'a> Client<'a> {
         Ok(id)
     }
 
-    fn do_response<'b>(&mut self, request_id: u16, mut response_buf :&'b mut [u8]) -> Result<Response<'b>, io::Error> {
-        let response = self.read_packet(response_buf)?;
+    fn do_response(&mut self, request_id: u16) -> Result<Response<'a>, io::Error> {
+        let response = self.read_packet()?;
 
         match response.typ {
             END_REQUEST => if response.request_id != request_id {
@@ -315,10 +315,10 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet<'b>(&mut self, response_buf: &'b mut [u8]) -> Result<Response<'b>, io::Error> {
+    fn read_packet(&mut self) -> Result<Response<'a>, io::Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
-        let mut response = Self::decode_packet_header(&buf, response_buf)?;
+        let mut response = self.decode_packet_header(&buf)?;
 
         if response.content_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.content_length as usize];
@@ -334,7 +334,7 @@ impl<'a> Client<'a> {
         Ok(response)
     }
 
-    fn decode_packet_header<'b>(buf: &[u8; HEADER_LEN], response_buf: &'b mut [u8]) -> Result<Response<'b>, io::Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response<'a>, io::Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
@@ -342,7 +342,7 @@ impl<'a> Client<'a> {
             content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
             padding_length: buf[6],
             reserved: buf[7],
-            content: response_buf,
+            content: &mut self.response_buf,
         };
 
         Ok(response)
