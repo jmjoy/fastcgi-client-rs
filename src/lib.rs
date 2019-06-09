@@ -258,7 +258,15 @@ impl<'a> Client<'a> {
 
     fn do_response(&mut self, request_id: u16) -> Result<(), io::Error> {
         loop {
-            let response = self.read_packet()?;
+            let response = match self.read_packet() {
+                Ok(response) => response,
+                Err(e) => {
+                    if e.kind() == ErrorKind::UnexpectedEof {
+                        break;
+                    }
+                    return Err(e);
+                },
+            };
 
             match response.typ {
                 STDOUT => {

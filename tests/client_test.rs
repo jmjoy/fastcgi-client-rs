@@ -1,5 +1,6 @@
 use fastcgi_client::{Address, ClientBuilder, Params};
 use std::io;
+use std::error::Error;
 
 #[test]
 fn test_client() {
@@ -20,5 +21,11 @@ fn test_client() {
             "0",
         ), &mut io::empty());
 
-    dbg!(response);
+    dbg!(&response);
+
+    response.map_err(|e| {
+        dbg!(e.source());
+    }).map(|x| {
+        dbg!(x);
+    });
 }
