@@ -1,5 +1,4 @@
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
-use std::alloc::System;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::io::{self, ErrorKind, Read, Write};
@@ -56,7 +55,7 @@ pub struct Response {
     content_length: u16,
     padding_length: u8,
     reserved: u8,
-    content: Rc<RefCell<Vec<u8>>>,
+    content: Vec<u8>,
 }
 
 pub struct ClientBuilder<'a> {
@@ -123,7 +122,7 @@ impl<'a> ClientBuilder<'a> {
         Ok(Client {
             builder: self,
             stream: Box::new(stream),
-            response_buf: Rc::new(RefCell::new(Vec::new())),
+            response_buf: Vec::new(),
         })
     }
 }
@@ -213,23 +212,26 @@ impl<'a> Into<HashMap<&'a str, &'a str>> for Params<'a> {
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
     stream: Box<ReadWrite>,
-    response_buf: Rc<RefCell<Vec<u8>>>,
+    response_buf: Vec<u8>,
 }
 
 impl<'a> Client<'a> {
-    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Response, io::Error> {
+    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Vec<u8>, io::Error> {
         let id = self.do_request(params, input)?;
-        self.do_response(id)
+        self.do_response(id)?;
+        Ok(self.response_buf)
     }
 
     fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
         let id = Self::generate_request_id();
+        dbg!(id);
         let keep_alive = self.builder.keep_alive as u8;
         let mut request_buf = Self::build_packet(
             BEGIN_REQUEST,
             &vec![0, RESPONDER, keep_alive, 0, 0, 0, 0, 0],
             id,
         )?;
+        dbg!(&request_buf);
         let mut params_buf: Vec<u8> = Vec::new();
         let params: HashMap<&'a str, &'a str> = params.into();
         for (k, v) in params {
@@ -246,31 +248,45 @@ impl<'a> Client<'a> {
         }
         request_buf.write_all(&Self::build_packet(STDIN, &vec![], id)?)?;
 
+        dbg!(&request_buf);
+
         self.stream.write_all(&request_buf)?;
+
 
         Ok(id)
     }
 
-    fn do_response(&mut self, request_id: u16) -> Result<Response, io::Error> {
-        let response = self.read_packet()?;
+    fn do_response(&mut self, request_id: u16) -> Result<(), io::Error> {
+        loop {
+            let response = self.read_packet()?;
 
-        match response.typ {
-            END_REQUEST => if response.request_id != request_id {
+            match response.typ {
+                STDOUT => {
+                    self.response_buf.write_all(&response.content)?;
+                }
+                STDERR => {
+                    return Err(io::Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
+                }
+                END_REQUEST => if response.request_id != request_id {
+                    break;
+                }
+                _ => {
+                    return Err(io::Error::new(ErrorKind::InvalidData, "Response type unknown."));
+                }
             }
-            _ => {}
         }
 
-        match response.content.clone().borrow()[4] {
+        match self.response_buf[4] {
             CANT_MPX_CONN => Err(io::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
             OVERLOADED => Err(io::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
             UNKNOWN_ROLE => Err(io::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
-            REQUEST_COMPLETE=> Ok(response),
+            REQUEST_COMPLETE=> Ok(()),
             _ => Err(io::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
         }
     }
 
     fn generate_request_id() -> u16 {
-        match SystemTime::now().elapsed() {
+        match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
             Ok(duration) => (duration.as_secs() % 65535) as u16 + 1,
             Err(_) => 1,
         }
@@ -326,12 +342,12 @@ impl<'a> Client<'a> {
         if response.content_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.content_length as usize];
             self.stream.read_exact(&mut buf)?;
-            response.content.borrow_mut().write_all(&mut buf)?;
+            response.content.write_all(&mut buf)?;
         }
         if response.padding_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.padding_length as usize];
             self.stream.read_exact(&mut buf)?;
-            response.content.borrow_mut().write_all(&mut buf)?;
+            response.content.write_all(&mut buf)?;
         }
 
         Ok(response)
@@ -345,7 +361,7 @@ impl<'a> Client<'a> {
             content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
             padding_length: buf[6],
             reserved: buf[7],
-            content: Rc::clone(&self.response_buf),
+            content: Vec::new(),
         };
 
         Ok(response)
