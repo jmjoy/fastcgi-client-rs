@@ -53,7 +53,7 @@ pub struct Response<'a> {
     content_length: u16,
     padding_length: u8,
     reserved: u8,
-    content: &'a [u8],
+    content: &'a mut [u8],
 }
 
 pub struct ClientBuilder<'a> {
@@ -116,9 +116,11 @@ impl<'a> ClientBuilder<'a> {
             },
             Address::UnixSock(_path) => unimplemented!(),
         };
+
         Ok(Client {
             builder: self,
             stream: Box::new(stream),
+            response_buf: Vec::new(),
         })
     }
 }
@@ -208,16 +210,16 @@ impl<'a> Into<HashMap<&'a str, &'a str>> for Params<'a> {
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
     stream: Box<ReadWrite>,
+    response_buf: Vec<u8>,
 }
 
 impl<'a> Client<'a> {
-    pub fn request(self, params: Params, input: &mut Read) -> Result<(), io::Error> {
+    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Response<'a>, io::Error> {
         let id = self.do_request(params, input)?;
-        dbg!(id);
-        Ok(())
+        self.do_response(id, &mut self.response_buf)
     }
 
-    fn do_request(mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
+    fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
         let id = Self::generate_request_id();
         let keep_alive = self.builder.keep_alive as u8;
         let mut request_buf = Self::build_packet(
@@ -246,8 +248,22 @@ impl<'a> Client<'a> {
         Ok(id)
     }
 
-    fn do_response(mut self, request_id: u16) -> Result<(), io::Error> {
-        Ok(())
+    fn do_response<'b>(&mut self, request_id: u16, mut response_buf :&'b mut [u8]) -> Result<Response<'b>, io::Error> {
+        let response = self.read_packet(response_buf)?;
+
+        match response.typ {
+            END_REQUEST => if response.request_id != request_id {
+            }
+            _ => {}
+        }
+
+        match response.content[4] {
+            CANT_MPX_CONN => Err(io::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
+            OVERLOADED => Err(io::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
+            UNKNOWN_ROLE => Err(io::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
+            REQUEST_COMPLETE=> Ok(response),
+            _ => Err(io::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
+        }
     }
 
     fn generate_request_id() -> u16 {
@@ -318,7 +334,7 @@ impl<'a> Client<'a> {
         Ok(response)
     }
 
-    fn decode_packet_header<'b>(buf: &[u8; HEADER_LEN], response_buf: &'b [u8]) -> Result<Response<'b>, io::Error> {
+    fn decode_packet_header<'b>(buf: &[u8; HEADER_LEN], response_buf: &'b mut [u8]) -> Result<Response<'b>, io::Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
