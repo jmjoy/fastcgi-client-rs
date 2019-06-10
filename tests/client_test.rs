@@ -1,6 +1,7 @@
 use fastcgi_client::{Address, ClientBuilder, Params};
 use std::io;
 use std::error::Error;
+use failure::Fail;
 
 #[test]
 fn test_client() {
@@ -21,11 +22,22 @@ fn test_client() {
             "0",
         ), &mut io::empty());
 
+//    let _: () = response;
     dbg!(&response);
 
-    response.map_err(|e| {
-        dbg!(e.source());
-    }).map(|x| {
-        dbg!(x);
-    });
+    if let Err(ref e) = response {
+//        let e: &Fail = e;
+        dbg!(e.backtrace());
+
+//        if let Some(bt) = e.as_fail().and_then(|cause| cause.backtrace()) {
+//            println!("{}", bt)
+//        }
+    }
+
+
+//    response.map_err(|e| {
+////        dbg!(e.source());
+//    }).map(|x| {
+//        dbg!(x);
+//    });
 }

@@ -41,6 +41,7 @@ pub trait ReadWrite: Read + Write {}
 
 impl<T> ReadWrite for T where T: Read + Write {}
 
+
 #[derive(Debug)]
 pub enum Address<'a> {
     Tcp(&'a str, u16),
@@ -101,17 +102,21 @@ impl<'a> ClientBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Result<Client<'a>, io::Error> {
+    pub fn build(self) -> Result<Client<'a>, failure::Error> {
         let stream = match self.address {
             Address::Tcp(host, port) => match self.connect_timeout {
                 Some(connect_timeout) => {
-                    let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| {
-                        io::Error::new(
-                            ErrorKind::NotFound,
-                            "This should not happen, but if it happen, \
-                             it means that your address is incorrect.",
-                        )
-                    })?;
+                    let addr = (host, port).to_socket_addrs()?.next()
+                        .unwrap();
+//                        .ok_or_else(|| {
+//                            failure::Error::new(
+//                                ErrorKind::NotFound,
+//                                "This should not happen, but if it happen, \
+//                                 it means that your address is incorrect.",
+//                            )
+//                        }
+//                        )
+//                    ?;
                     TcpStream::connect_timeout(&addr, connect_timeout)?
                 }
                 None => TcpStream::connect((host, port))?,
@@ -216,13 +221,13 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
-    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Vec<u8>, io::Error> {
+    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Vec<u8>, failure::Error> {
         let id = self.do_request(params, input)?;
         self.do_response(id)?;
         Ok(self.response_buf)
     }
 
-    fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, io::Error> {
+    fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, failure::Error> {
         let id = Self::generate_request_id();
         dbg!(id);
         let keep_alive = self.builder.keep_alive as u8;
@@ -256,14 +261,14 @@ impl<'a> Client<'a> {
         Ok(id)
     }
 
-    fn do_response(&mut self, request_id: u16) -> Result<(), io::Error> {
+    fn do_response(&mut self, request_id: u16) -> Result<(), failure::Error> {
         loop {
             let response = match self.read_packet() {
                 Ok(response) => response,
                 Err(e) => {
-                    if e.kind() == ErrorKind::UnexpectedEof {
-                        break;
-                    }
+//                    if e.kind() == ErrorKind::UnexpectedEof {
+//                        break;
+//                    }
                     return Err(e);
                 },
             };
@@ -273,24 +278,27 @@ impl<'a> Client<'a> {
                     self.response_buf.write_all(&response.content)?;
                 }
                 STDERR => {
-                    return Err(io::Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
+                    unreachable!();
+//                    return Err(failure::Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
                 }
                 END_REQUEST => if response.request_id != request_id {
                     break;
                 }
                 _ => {
-                    return Err(io::Error::new(ErrorKind::InvalidData, "Response type unknown."));
+                    unreachable!();
+//                    return Err(failure::Error::new(ErrorKind::InvalidData, "Response type unknown."));
                 }
             }
         }
 
-        match self.response_buf[4] {
-            CANT_MPX_CONN => Err(io::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
-            OVERLOADED => Err(io::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
-            UNKNOWN_ROLE => Err(io::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
-            REQUEST_COMPLETE=> Ok(()),
-            _ => Err(io::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
-        }
+        Ok(())
+//        match self.response_buf[4] {
+//            CANT_MPX_CONN => Err(failure::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
+//            OVERLOADED => Err(failure::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
+//            UNKNOWN_ROLE => Err(failure::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
+//            REQUEST_COMPLETE=> Ok(()),
+//            _ => Err(failure::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
+//        }
     }
 
     fn generate_request_id() -> u16 {
@@ -300,7 +308,7 @@ impl<'a> Client<'a> {
         }
     }
 
-    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, io::Error> {
+    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, failure::Error> {
         let len = content.len();
         // TODO Now just limit 2^16 lengths content, I will optimize it later version.
         let len = min(len, 65535) as u16;
@@ -316,7 +324,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, io::Error> {
+    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, failure::Error> {
         let mut buf = Vec::new();
 
         let mut n_len = name.len() as u32;
@@ -342,7 +350,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet(&mut self) -> Result<Response, io::Error> {
+    fn read_packet(&mut self) -> Result<Response, failure::Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
         let mut response = self.decode_packet_header(&buf)?;
@@ -355,13 +363,12 @@ impl<'a> Client<'a> {
         if response.padding_length > 0 {
             let mut buf: Vec<u8> = vec![0; response.padding_length as usize];
             self.stream.read_exact(&mut buf)?;
-            response.content.write_all(&mut buf)?;
         }
 
         Ok(response)
     }
 
-    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, io::Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, failure::Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
