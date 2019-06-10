@@ -1,46 +1,109 @@
-use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use log::info;
+use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, ErrorKind, Read, Write};
+use std::mem::size_of;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::time::{Duration, SystemTime};
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::time::{Duration, SystemTime};
 
 const VERSION_1: u8 = 1;
+const MAX_LENGTH: usize = 0xffff;
+const KEEP_CONN: u8 = 1;
+const HEADER_LEN: usize = size_of::<Header>();
 
-const BEGIN_REQUEST: u8 = 1;
-const ABORT_REQUEST: u8 = 2;
-const END_REQUEST: u8 = 3;
-const PARAMS: u8 = 4;
-const STDIN: u8 = 5;
-const STDOUT: u8 = 6;
-const STDERR: u8 = 7;
-const DATA: u8 = 8;
-const GET_VALUES: u8 = 9;
-const GET_VALUES_RESULT: u8 = 10;
-const UNKNOWN_TYPE: u8 = 11;
-const MAXTYPE: u8 = UNKNOWN_TYPE;
+const TYPE_BEGIN_REQUEST: u8 = 1;
+const TYPE_ABORT_REQUEST: u8 = 2;
+const TYPE_END_REQUEST: u8 = 3;
+const TYPE_PARAMS: u8 = 4;
+const TYPE_STDIN: u8 = 5;
+const TYPE_STDOUT: u8 = 6;
+const TYPE_STDERR: u8 = 7;
+const TYPE_DATA: u8 = 8;
+const TYPE_GET_VALUES: u8 = 9;
+const TYPE_GET_VALUES_RESULT: u8 = 10;
+const TYPE_UNKNOWN_TYPE: u8 = 11;
+const TYPE_MAX_TYPE: u8 = TYPE_UNKNOWN_TYPE;
 
-const RESPONDER: u8 = 1;
-const AUTHORIZER: u8 = 2;
-const FILTER: u8 = 3;
+const ROLE_RESPONDER: u8 = 1;
+const ROLE_AUTHORIZER: u8 = 2;
+const ROLE_FILTER: u8 = 3;
 
-const REQUEST_COMPLETE: u8 = 0;
-const CANT_MPX_CONN: u8 = 1;
-const OVERLOADED: u8 = 2;
-const UNKNOWN_ROLE: u8 = 3;
+const STATUS_REQUEST_COMPLETE: u8 = 0;
+const STATUS_CANT_MPX_CONN: u8 = 1;
+const STATUS_OVERLOADED: u8 = 2;
+const STATUS_UNKNOWN_ROLE: u8 = 3;
 
-const MAX_CONNS: &'static str = "MAX_CONNS";
-const MAX_REQS: &'static str = "MAX_REQS";
-const MPXS_CONNS: &'static str = "MPXS_CONNS";
+#[derive(Debug)]
+struct Header {
+    version: u8,
+    r#type: u8,
+    request_id: u16,
+    content_length: u16,
+    padding_length: u8,
+    reserved: u8,
+}
 
-const HEADER_LEN: usize = 8;
+struct Record<'a> {
+    header: Header,
+    content_data: &'a [u8],
+    padding_data: &'a [u8],
+}
 
-pub trait ReadWrite: Read + Write {}
+#[derive(Debug)]
+struct BeginRequest {
+    role: u16,
+    flags: u8,
+    reserved: [u8; 5],
+}
+
+#[derive(Debug)]
+struct BeginRequestRec {
+    header: Header,
+    begin_request: BeginRequest,
+}
+
+#[derive(Debug)]
+struct EndRequest {
+    app_status: u32,
+    protocol_status: u8,
+    reserved: [u8; 3],
+}
+
+struct EndRequestRec {
+    header: Header,
+    end_request: EndRequest,
+}
+
+trait ReadWrite: Read + Write {}
 
 impl<T> ReadWrite for T where T: Read + Write {}
 
+#[derive(Debug)]
+pub enum Error {
+    IoError(io::Error),
+    ClientError(String),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Error::IoError(e) => e.fmt(f),
+            Error::ClientError(s) => s.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error::IoError(e)
+    }
+}
 
 #[derive(Debug)]
 pub enum Address<'a> {
@@ -102,21 +165,17 @@ impl<'a> ClientBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Result<Client<'a>, failure::Error> {
+    pub fn build(self) -> Result<Client<'a>, Error> {
         let stream = match self.address {
             Address::Tcp(host, port) => match self.connect_timeout {
                 Some(connect_timeout) => {
-                    let addr = (host, port).to_socket_addrs()?.next()
-                        .unwrap();
-//                        .ok_or_else(|| {
-//                            failure::Error::new(
-//                                ErrorKind::NotFound,
-//                                "This should not happen, but if it happen, \
-//                                 it means that your address is incorrect.",
-//                            )
-//                        }
-//                        )
-//                    ?;
+                    let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| {
+                        io::Error::new(
+                            ErrorKind::NotFound,
+                            "This should not happen, but if it happen, \
+                             it means that your address is incorrect.",
+                        )
+                    })?;
                     TcpStream::connect_timeout(&addr, connect_timeout)?
                 }
                 None => TcpStream::connect((host, port))?,
@@ -221,56 +280,57 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
-    pub fn request(mut self, params: Params<'a>, input: &mut Read) -> Result<Vec<u8>, failure::Error> {
-        let id = self.do_request(params, input)?;
-        self.do_response(id)?;
+    pub fn do_request(mut self, params: Params<'a>, body: &mut Read) -> Result<Vec<u8>, Error> {
+        let id = self.handle_request(params, body)?;
+        self.handle_response(id)?;
         Ok(self.response_buf)
     }
 
-    fn do_request(&mut self, params: Params<'a>, input: &mut Read) -> Result<u16, failure::Error> {
+    fn handle_request(&mut self, params: Params<'a>, body: &mut Read) -> Result<u16, Error> {
         let id = Self::generate_request_id();
-        dbg!(id);
+
+        info!("[id = {}] Start handle request.", id);
+
         let keep_alive = self.builder.keep_alive as u8;
-        let mut request_buf = Self::build_packet(
-            BEGIN_REQUEST,
-            &vec![0, RESPONDER, keep_alive, 0, 0, 0, 0, 0],
-            id,
-        )?;
-        dbg!(&request_buf);
+        let content = &vec![0, ROLE_RESPONDER, keep_alive, 0, 0, 0, 0, 0];
+        let mut request_buf = Self::build_packet(TYPE_BEGIN_REQUEST, content, id)?;
+        info!("[id = {}] Sended BEGIN_REQUEST: {:?}", id, request_buf);
+
         let mut params_buf: Vec<u8> = Vec::new();
         let params: HashMap<&'a str, &'a str> = params.into();
         for (k, v) in params {
             params_buf.write_all(&Self::build_nv_pair(k, v)?);
         }
         if params_buf.len() > 0 {
-            request_buf.write_all(&params_buf)?;
+            let buf = &Self::build_packet(TYPE_PARAMS, &params_buf, id)?;
+            request_buf.write_all(buf)?;
+            info!("[id = {}] Sended PARAMS: {:?}", id, buf);
         }
 
         let mut input_buf: Vec<u8> = Vec::new();
-        io::copy(input, &mut input_buf)?;
+        io::copy(body, &mut input_buf)?;
         if input_buf.len() > 0 {
-            request_buf.write_all(&Self::build_packet(STDIN, &input_buf, id)?)?;
+            let buf = &Self::build_packet(TYPE_STDIN, &input_buf, id)?;
+            request_buf.write_all(buf)?;
+            info!("[id = {}] Sended STDIN: {:?}", id, buf);
         }
-        request_buf.write_all(&Self::build_packet(STDIN, &vec![], id)?)?;
-
-        dbg!(&request_buf);
+        request_buf.write_all(&Self::build_packet(TYPE_STDIN, &vec![], id)?)?;
 
         self.stream.write_all(&request_buf)?;
-
 
         Ok(id)
     }
 
-    fn do_response(&mut self, request_id: u16) -> Result<(), failure::Error> {
+    fn handle_response(&mut self, request_id: u16) -> Result<(), Error> {
         loop {
             let response = match self.read_packet() {
                 Ok(response) => response,
                 Err(e) => {
-//                    if e.kind() == ErrorKind::UnexpectedEof {
-//                        break;
-//                    }
+                    //                    if e.kind() == ErrorKind::UnexpectedEof {
+                    //                        break;
+                    //                    }
                     return Err(e);
-                },
+                }
             };
 
             match response.typ {
@@ -279,36 +339,35 @@ impl<'a> Client<'a> {
                 }
                 STDERR => {
                     unreachable!();
-//                    return Err(failure::Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
+                    //                    return Err(Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
                 }
-                END_REQUEST => if response.request_id != request_id {
-                    break;
+                END_REQUEST => {
+                    if response.request_id != request_id {
+                        break;
+                    }
                 }
                 _ => {
                     unreachable!();
-//                    return Err(failure::Error::new(ErrorKind::InvalidData, "Response type unknown."));
+                    //                    return Err(Error::new(ErrorKind::InvalidData, "Response type unknown."));
                 }
             }
         }
 
         Ok(())
-//        match self.response_buf[4] {
-//            CANT_MPX_CONN => Err(failure::Error::new(ErrorKind::Other, "This app can't multiplex [CANT_MPX_CONN]")),
-//            OVERLOADED => Err(failure::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
-//            UNKNOWN_ROLE => Err(failure::Error::new(ErrorKind::Other, "Role value not known [UNKNOWN_ROLE]")),
-//            REQUEST_COMPLETE=> Ok(()),
-//            _ => Err(failure::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
-//        }
+        //        match self.response_buf[4] {
+        //            CantMpxConn => Err(Error::new(ErrorKind::Other, "This app can't multiplex [CantMpxConn]")),
+        //            OVERLOADED => Err(Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
+        //            UnknownRole => Err(Error::new(ErrorKind::Other, "Role value not known [UnknownRole]")),
+        //            RequestComplete=> Ok(()),
+        //            _ => Err(Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
+        //        }
     }
 
     fn generate_request_id() -> u16 {
-        match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(duration) => (duration.as_secs() % 65535) as u16 + 1,
-            Err(_) => 1,
-        }
+        1
     }
 
-    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, failure::Error> {
+    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, Error> {
         let len = content.len();
         // TODO Now just limit 2^16 lengths content, I will optimize it later version.
         let len = min(len, 65535) as u16;
@@ -324,7 +383,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, failure::Error> {
+    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, Error> {
         let mut buf = Vec::new();
 
         let mut n_len = name.len() as u32;
@@ -350,7 +409,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet(&mut self) -> Result<Response, failure::Error> {
+    fn read_packet(&mut self) -> Result<Response, Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
         let mut response = self.decode_packet_header(&buf)?;
@@ -368,7 +427,7 @@ impl<'a> Client<'a> {
         Ok(response)
     }
 
-    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, failure::Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
@@ -381,5 +440,4 @@ impl<'a> Client<'a> {
 
         Ok(response)
     }
-
 }
