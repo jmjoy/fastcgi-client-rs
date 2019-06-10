@@ -28,7 +28,7 @@ fn test_client() {
         );
 
     //    let _: () = response;
-    dbg!(&response);
+    dbg!(&response.map(|buf| String::from_utf8(buf ).unwrap()));
 
     //    if let Err(ref e) = response {
     //        //        let e: &Fail = e;

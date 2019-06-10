@@ -1,5 +1,5 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use log::info;
+use log::{debug, info};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::HashMap;
@@ -318,10 +318,12 @@ impl<'a> Client<'a> {
 
         self.stream.write_all(&request_buf)?;
 
+        debug!("临时");
+
         Ok(id)
     }
 
-    fn handle_response(&mut self, request_id: u16) -> Result<(), Error> {
+    fn handle_response(&mut self, request_id: u16) -> Result<(), io::Error> {
         loop {
             let response = match self.read_packet() {
                 Ok(response) => response,
@@ -329,38 +331,46 @@ impl<'a> Client<'a> {
                     //                    if e.kind() == ErrorKind::UnexpectedEof {
                     //                        break;
                     //                    }
-                    return Err(e);
+                    return Err(e.into());
                 }
             };
 
+            info!("[id = {}] Read response packet: {:?}", request_id, response);
+
             match response.typ {
-                STDOUT => {
-                    self.response_buf.write_all(&response.content)?;
+                TYPE_STDOUT => {
+                    self.response_buf.write(&response.content)?;
+                    info!("[id = {}] Write to response buffer: {:?}", request_id, &self.response_buf);
                 }
-                STDERR => {
-                    unreachable!();
-                    //                    return Err(Error::new(ErrorKind::InvalidData, "Response type is STDERR."));
+                TYPE_STDERR => {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidData,
+                        "Response type is STDERR.",
+                    ));
                 }
-                END_REQUEST => {
-                    if response.request_id != request_id {
+                TYPE_END_REQUEST => {
+                    if response.request_id == request_id {
+                        info!("[id = {}] End of request", request_id);
                         break;
                     }
                 }
                 _ => {
-                    unreachable!();
-                    //                    return Err(Error::new(ErrorKind::InvalidData, "Response type unknown."));
+                    return Err(io::Error::new(ErrorKind::InvalidData, "Response type unknown.").into());
                 }
             }
         }
 
+        info!("[id = {}] Finish response, buf: {:?}", request_id, &self.response_buf);
+
         Ok(())
-        //        match self.response_buf[4] {
-        //            CantMpxConn => Err(Error::new(ErrorKind::Other, "This app can't multiplex [CantMpxConn]")),
-        //            OVERLOADED => Err(Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
-        //            UnknownRole => Err(Error::new(ErrorKind::Other, "Role value not known [UnknownRole]")),
-        //            RequestComplete=> Ok(()),
-        //            _ => Err(Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
-        //        }
+
+//        match self.response_buf[4] {
+//            STATUS_CANT_MPX_CONN => Err(io::Error::new(ErrorKind::Other, "This app can't multiplex [CantMpxConn]")),
+//            STATUS_OVERLOADED => Err(io::Error::new(ErrorKind::Other, "New request rejected; too busy [OVERLOADED]")),
+//            STATUS_UNKNOWN_ROLE => Err(io::Error::new(ErrorKind::Other, "Role value not known [UnknownRole]")),
+//            STATUS_REQUEST_COMPLETE=> Ok(()),
+//            _ => Err(io::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
+//        }
     }
 
     fn generate_request_id() -> u16 {
@@ -409,7 +419,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet(&mut self) -> Result<Response, Error> {
+    fn read_packet(&mut self) -> Result<Response, io::Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
         let mut response = self.decode_packet_header(&buf)?;
@@ -427,7 +437,7 @@ impl<'a> Client<'a> {
         Ok(response)
     }
 
-    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, io::Error> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
