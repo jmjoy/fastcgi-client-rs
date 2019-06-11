@@ -1,7 +1,13 @@
-const VERSION_1: u8 = 1;
-const MAX_LENGTH: usize = 0xffff;
-const KEEP_CONN: u8 = 1;
-pub const HEADER_LEN: usize = size_of::<Header>();
+use std::mem::size_of;
+use std::io::{Read, Write};
+
+pub(crate) const VERSION_1: u8 = 1;
+pub(crate) const MAX_LENGTH: usize = 0xffff;
+pub(crate) const HEADER_LEN: usize = size_of::<Header>();
+
+pub(crate) trait ReadWrite: Read + Write {}
+
+impl<T> ReadWrite for T where T: Read + Write {}
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -29,45 +35,54 @@ pub struct Header {
 }
 
 #[derive(Debug)]
-struct Record<'a> {
+pub struct Record<'a> {
     header: Header,
     content_data: &'a [u8],
     padding_data: &'a [u8],
 }
 
 #[derive(Debug)]
-struct BeginRequest {
-    role: u16,
+#[repr(u16)]
+pub enum Role {
+    Responder = 1,
+    Authorizer = 2,
+    Filter = 3,
+}
+
+#[derive(Debug)]
+pub struct BeginRequest {
+    role: Role,
     flags: u8,
     reserved: [u8; 5],
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 struct BeginRequestRec {
     header: Header,
     begin_request: BeginRequest,
 }
 
 #[derive(Debug)]
-struct EndRequest {
+#[repr(u8)]
+pub enum ProtocolStatus {
+    RequestComplete = 0,
+    CantMpxConn = 1,
+    Overloaded = 2,
+    UnknownRole = 3,
+}
+
+#[derive(Debug)]
+pub struct EndRequest {
     app_status: u32,
-    protocol_status: u8,
+    protocol_status: ProtocolStatus,
     reserved: [u8; 3],
 }
 
 #[allow(dead_code)]
-pub struct EndRequestRec {
+struct EndRequestRec {
     header: Header,
     end_request: EndRequest,
 }
-
-trait ReadWrite: Read + Write {}
-
-impl<T> ReadWrite for T where T: Read + Write {}
-
-
-
 
 #[derive(Debug)]
 pub enum Address<'a> {
@@ -76,7 +91,7 @@ pub enum Address<'a> {
 }
 
 #[derive(Debug)]
-pub struct Response {
+struct Response {
     version: u8,
     typ: u8,
     request_id: u16,
@@ -86,3 +101,12 @@ pub struct Response {
     content: Vec<u8>,
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_header_len() {
+        assert_eq!(HEADER_LEN, 8);
+    }
+}

@@ -1,3 +1,7 @@
+use std::time::Duration;
+use std::io::{self, ErrorKind, Result, Read, Write};
+use crate::ClientResult;
+use byteorder::BigEndian;
 
 pub struct ClientBuilder<'a> {
     address: Address<'a>,
@@ -76,14 +80,14 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
-    pub fn do_request(mut self, params: Params<'a>, body: &mut Read) -> Result<Vec<u8>, Error> {
+    pub fn do_request(mut self, params: Params<'a>, body: &mut Read) -> ClientResult<Vec<u8>> {
         let id = RequestIdGenerator.generate();
         let id = self.handle_request(params, body)?;
         self.handle_response(id)?;
         Ok(self.response_buf)
     }
 
-    fn handle_request(&mut self, params: Params<'a>, body: &mut Read) -> Result<u16, Error> {
+    fn handle_request(&mut self, params: Params<'a>, body: &mut Read) -> ClientResult<u16> {
         let id = Self::generate_request_id();
 
         info!("[id = {}] Start handle request.", id);
@@ -176,7 +180,7 @@ impl<'a> Client<'a> {
         1
     }
 
-    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, Error> {
+    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, ClientError> {
         let len = content.len();
         // TODO Now just limit 2^16 lengths content, I will optimize it later version.
         let len = min(len, 65535) as u16;
@@ -192,7 +196,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, Error> {
+    fn build_nv_pair<'b>(name: &'b str, value: &'b str) -> Result<Vec<u8>, ClientError> {
         let mut buf = Vec::new();
 
         let mut n_len = name.len() as u32;
@@ -218,7 +222,7 @@ impl<'a> Client<'a> {
         Ok(buf)
     }
 
-    fn read_packet(&mut self) -> Result<Response, io::Error> {
+    fn read_packet(&mut self) -> io::Result<Response, io::Error> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         self.stream.read_exact(&mut buf)?;
         let mut response = self.decode_packet_header(&buf)?;
@@ -236,7 +240,7 @@ impl<'a> Client<'a> {
         Ok(response)
     }
 
-    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> Result<Response, io::Error> {
+    fn decode_packet_header(&mut self, buf: &[u8; HEADER_LEN]) -> io::Result<Response> {
         let mut response = Response {
             version: buf[0],
             typ: buf[1],
@@ -252,25 +256,3 @@ impl<'a> Client<'a> {
 }
 
 
-#[derive(Debug)]
-pub enum Error {
-    IoError(io::Error),
-    ClientError(String),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        match self {
-            Error::IoError(e) => e.fmt(f),
-            Error::ClientError(s) => s.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
-        Error::IoError(e)
-    }
-}

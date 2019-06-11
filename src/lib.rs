@@ -40,3 +40,5 @@ mod error;
 mod id;
 mod meta;
 mod params;
+
+pub use error::{ClientResult, ClientError};
