@@ -45,3 +45,8 @@ fn test_client() {
     //    //        dbg!(x);
     //    //    });
 }
+
+#[test]
+fn test_header_len() {
+    assert_eq!(fastcgi_client::HEADER_LEN, 8);
+}
