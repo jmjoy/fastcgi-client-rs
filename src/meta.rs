@@ -1,5 +1,8 @@
 use std::mem::size_of;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
+use std::collections::HashMap;
+use byteorder::BigEndian;
+use std::fs::hard_link;
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -25,20 +28,48 @@ pub enum RequestType {
 }
 
 #[derive(Debug)]
-pub struct Header {
-    version: u8,
-    r#type: RequestType,
-    request_id: u16,
-    content_length: u16,
-    padding_length: u8,
-    reserved: u8,
+pub(crate) struct Header {
+    pub(crate)   version: u8,
+    pub(crate)   r#type: RequestType,
+    pub(crate)   request_id: u16,
+    pub(crate)   content_length: u16,
+    pub(crate)   padding_length: u8,
+    pub(crate)   reserved: u8,
+}
+
+impl Header {
+    pub fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
+        Self {
+            version: VERSION_1,
+            r#type,
+            request_id,
+            content_length:
+        }
+    }
+
+    pub fn write_to_stream(self, writer: &mut Write, content: &[u8]) -> io::Result<()> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.push(self.version);
+        buf.push(self.r#type as u8);
+        buf.write_u16::<BigEndian>(self.request_id)?;
+        buf.write_u16::<BigEndian>(self.content_length)?;
+        buf.push(self.padding_length);
+        buf.push(self.reserved);
+
+        writer.write_all(&buf)?;
+        writer.write_all(content)?;
+        writer.write_all(&[0; self.padding_length]);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct Record<'a> {
     header: Header,
-    content_data: &'a [u8],
-    padding_data: &'a [u8],
+    content: &'a [u8],
+}
+
+impl Record {
 }
 
 #[derive(Debug)]
@@ -50,16 +81,32 @@ pub enum Role {
 }
 
 #[derive(Debug)]
-pub struct BeginRequest {
-    role: Role,
-    flags: u8,
-    reserved: [u8; 5],
+pub(crate) struct BeginRequest {
+ pub(crate)   role: Role,
+ pub(crate)   flags: u8,
+ pub(crate)   reserved: [u8; 5],
+}
+
+impl Into<Vec<u8>> for BeginRequest {
+    fn into(self) -> Vec<u8> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.write_u16::<BigEndian>(self.role as u16)?;
+        buf.push(self.flags);
+        buf.extend_from_slice(&self.reserved);
+        buf
+    }
 }
 
 #[derive(Debug)]
-struct BeginRequestRec {
-    header: Header,
-    begin_request: BeginRequest,
+pub(crate) struct BeginRequestRec {
+    pub(crate) header: Header,
+    pub(crate) begin_request: BeginRequest,
+}
+
+impl BeginRequestRec {
+    pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
+        self.header.write_to_stream(writer, self.begin_request.into())
+    }
 }
 
 #[derive(Debug)]
@@ -99,6 +146,13 @@ struct Response {
     padding_length: u8,
     reserved: u8,
     content: Vec<u8>,
+}
+
+pub(crate) type OutputMap = HashMap<u16, Output>;
+
+pub struct Output {
+    stdout: Box<Read>,
+    stderr: Box<Read>,
 }
 
 #[cfg(test)]

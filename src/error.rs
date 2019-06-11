@@ -1,5 +1,6 @@
 use std::io;
 use std::fmt::{self, Display, Formatter};
+use core::fmt::Debug;
 
 pub(crate) type ClientResult<T> = Result<T, ClientError>;
 
@@ -7,6 +8,7 @@ pub(crate) type ClientResult<T> = Result<T, ClientError>;
 pub(crate) enum ClientError {
     IoError(io::Error),
     ClientError(String),
+    RequestIdNotFound(u16),
 }
 
 impl Display for ClientError {
@@ -14,6 +16,7 @@ impl Display for ClientError {
         match self {
             ClientError::IoError(e) => e.fmt(f),
             ClientError::ClientError(s) => s.fmt(f),
+            ClientError::RequestIdNotFound(id) => format!("Request id `{}` not found.", id).fmt(f),
         }
     }
 }

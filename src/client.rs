@@ -1,7 +1,11 @@
 use std::time::Duration;
 use std::io::{self, ErrorKind, Result, Read, Write};
-use crate::ClientResult;
+use crate::{ClientResult, ClientError};
 use byteorder::BigEndian;
+use std::net::TcpStream;
+use crate::meta::{VERSION_1, Address, OutputMap, Output, BeginRequestRec, Header, BeginRequest, RequestType};
+use std::collections::HashMap;
+use crate::id::RequestIdGenerator;
 
 pub struct ClientBuilder<'a> {
     address: Address<'a>,
@@ -46,7 +50,7 @@ impl<'a> ClientBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Result<Client<'a>, Error> {
+    pub fn build(self) -> io::Result<Client<'a>> {
         let stream = match self.address {
             Address::Tcp(host, port) => match self.connect_timeout {
                 Some(connect_timeout) => {
@@ -67,7 +71,7 @@ impl<'a> ClientBuilder<'a> {
         Ok(Client {
             builder: self,
             stream: Box::new(stream),
-            response_buf: Vec::new(),
+            outputs: HashMap::new(),
         })
     }
 }
@@ -76,25 +80,40 @@ impl<'a> ClientBuilder<'a> {
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
     stream: Box<ReadWrite>,
-    response_buf: Vec<u8>,
+    outputs: OutputMap,
 }
 
 impl<'a> Client<'a> {
-    pub fn do_request(mut self, params: Params<'a>, body: &mut Read) -> ClientResult<Vec<u8>> {
+    pub fn do_request(&mut self, params: Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
-        let id = self.handle_request(params, body)?;
+        self.handle_request(id, params, body)?;
         self.handle_response(id)?;
-        Ok(self.response_buf)
+        Ok(self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))?)
     }
 
-    fn handle_request(&mut self, params: Params<'a>, body: &mut Read) -> ClientResult<u16> {
-        let id = Self::generate_request_id();
-
+    fn handle_request(&mut self, id: u16, params: Params<'a>, body: &mut Read) -> ClientResult<()> {
         info!("[id = {}] Start handle request.", id);
+
+
+        BeginRequestRec {
+            header: Header {
+                version: VERSION_1,
+r#type: RequestType::BeginRequest,
+request_id: id,
+content_length: u16,
+padding_length: u8,
+reserved: u8,
+
+
+
+
+            }
+        }
 
         let keep_alive = self.builder.keep_alive as u8;
         let content = &vec![0, ROLE_RESPONDER, keep_alive, 0, 0, 0, 0, 0];
         let mut request_buf = Self::build_packet(TYPE_BEGIN_REQUEST, content, id)?;
+
         info!("[id = {}] Sended BeginRequest: {:?}", id, request_buf);
 
         let mut params_buf: Vec<u8> = Vec::new();
@@ -174,10 +193,6 @@ impl<'a> Client<'a> {
 //            STATUS_REQUEST_COMPLETE=> Ok(()),
 //            _ => Err(io::Error::new(ErrorKind::InvalidData, "Unexpected value of content[4]"))
 //        }
-    }
-
-    fn generate_request_id() -> u16 {
-        1
     }
 
     fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, ClientError> {
