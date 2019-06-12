@@ -3,9 +3,9 @@ use std::collections::hash_map::RandomState;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Default, Debug)]
-pub(crate) struct Params<'a, S = RandomState>(HashMap<&'a str, &'a str, S>);
+pub struct Params<'a>(HashMap<&'a str, &'a str>);
 
-impl<'a, S = RandomState> Params<'a, S> {
+impl<'a> Params<'a> {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -93,15 +93,15 @@ impl<'a, S = RandomState> Params<'a, S> {
     }
 }
 
-impl<'a, S = RandomState> Deref for Params<'a, S> {
-    type Target = HashMap<&'a str, &'a str, S>;
+impl<'a> Deref for Params<'a> {
+    type Target = HashMap<&'a str, &'a str>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<'a, S = RandomState> DerefMut for Params<'a, S> {
+impl<'a> DerefMut for Params<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

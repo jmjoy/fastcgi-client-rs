@@ -6,12 +6,12 @@ pub(crate) struct RequestIdGenerator;
 
 impl RequestIdGenerator {
     pub(crate) fn generate(&self) -> u16 {
-        COUNTER.fetch_add(Ordering::SeqCst)
+        COUNTER.fetch_add(1, Ordering::SeqCst)
     }
 }
 
 impl Drop for RequestIdGenerator {
     fn drop(&mut self) {
-        COUNTER.fetch_sub(Ordering::SeqCst)
+        COUNTER.fetch_sub(1, Ordering::SeqCst);
     }
 }

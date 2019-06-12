@@ -1,8 +1,11 @@
 use std::mem::size_of;
 use std::io::{self, Read, Write};
 use std::collections::HashMap;
-use byteorder::BigEndian;
+use byteorder::{WriteBytesExt, BigEndian};
 use std::fs::hard_link;
+use std::cmp::min;
+use std::fmt::{self, Debug};
+use std::convert::TryInto;
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -38,16 +41,19 @@ pub(crate) struct Header {
 }
 
 impl Header {
-    pub fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
+    fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
+        let content_length = min(content.len(), MAX_LENGTH) as u16;
         Self {
             version: VERSION_1,
             r#type,
             request_id,
-            content_length:
+            content_length,
+            padding_length: (-(content_length as i16) & 7) as u8,
+            reserved: 0,
         }
     }
 
-    pub fn write_to_stream(self, writer: &mut Write, content: &[u8]) -> io::Result<()> {
+    fn write_to_stream(self, writer: &mut Write, content: &[u8]) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
         buf.push(self.r#type as u8);
@@ -58,21 +64,20 @@ impl Header {
 
         writer.write_all(&buf)?;
         writer.write_all(content)?;
-        writer.write_all(&[0; self.padding_length]);
+        writer.write_all(&vec![0; self.padding_length as usize]);
         Ok(())
     }
 }
 
 #[derive(Debug)]
-pub struct Record<'a> {
+struct Record<'a> {
     header: Header,
     content: &'a [u8],
 }
 
-impl Record {
-}
+impl<'a> Record<'a> {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum Role {
     Responder = 1,
@@ -82,30 +87,55 @@ pub enum Role {
 
 #[derive(Debug)]
 pub(crate) struct BeginRequest {
- pub(crate)   role: Role,
- pub(crate)   flags: u8,
- pub(crate)   reserved: [u8; 5],
+    pub(crate)   role: Role,
+    pub(crate)   flags: u8,
+    pub(crate)   reserved: [u8; 5],
 }
 
-impl Into<Vec<u8>> for BeginRequest {
-    fn into(self) -> Vec<u8> {
+impl BeginRequest {
+    pub(crate) fn new(role: Role, keep_alive: bool) -> Self {
+        Self {
+            role,
+            flags: keep_alive as u8,
+            reserved: [0; 5],
+        }
+    }
+
+    pub(crate) fn to_content(&self) -> io::Result<Vec<u8>> {
         let mut buf: Vec<u8> = Vec::new();
         buf.write_u16::<BigEndian>(self.role as u16)?;
         buf.push(self.flags);
         buf.extend_from_slice(&self.reserved);
-        buf
+        Ok(buf)
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct BeginRequestRec {
     pub(crate) header: Header,
     pub(crate) begin_request: BeginRequest,
+    pub(crate) content: Vec<u8>,
 }
 
 impl BeginRequestRec {
+    pub(crate) fn new(request_id: u16, role: Role, keep_alive: bool) -> io::Result<Self> {
+        let begin_request = BeginRequest::new(role, keep_alive);
+        let content = begin_request.to_content()?;
+        let header = Header::new(RequestType::BeginRequest, request_id, &content);
+        Ok(Self {
+            header,
+            begin_request,
+            content,
+        })
+    }
+
     pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
-        self.header.write_to_stream(writer, self.begin_request.into())
+        self.header.write_to_stream(writer, &self.content)
+    }
+}
+
+impl Debug for BeginRequestRec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request).fmt(f)
     }
 }
 
@@ -125,7 +155,6 @@ pub struct EndRequest {
     reserved: [u8; 3],
 }
 
-#[allow(dead_code)]
 struct EndRequestRec {
     header: Header,
     end_request: EndRequest,
@@ -164,3 +193,4 @@ mod test {
         assert_eq!(HEADER_LEN, 8);
     }
 }
+

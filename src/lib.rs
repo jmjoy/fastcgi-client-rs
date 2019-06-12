@@ -41,4 +41,7 @@ mod id;
 mod meta;
 mod params;
 
-pub use error::{ClientResult, ClientError};
+pub use crate::client::{Client, ClientBuilder};
+pub use crate::error::{ClientResult, ClientError};
+pub use crate::params::Params;
+pub use crate::meta::{Address};
