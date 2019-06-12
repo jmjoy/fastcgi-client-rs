@@ -98,8 +98,8 @@ impl<'a> Client<'a> {
         info!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.builder.keep_alive)?;
-        info!("[id = {}] Before send to stream: {:?}.", id, &begin_request_rec);
-
+        info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
+        begin_request_rec.write_to_stream(&mut self.stream)?;
 
 //        let content = &vec![0, ROLE_RESPONDER, keep_alive, 0, 0, 0, 0, 0];
 //        let mut request_buf = Self::build_packet(TYPE_BEGIN_REQUEST, content, id)?;

@@ -41,6 +41,15 @@ pub(crate) struct Header {
 }
 
 impl Header {
+    fn write_to_stream_batches(r#type: RequestType, request_id: u16, writer: &mut Write, content: &mut Read) -> io::Result<()> {
+        let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
+        let readed = content.read(&mut buf)?;
+
+        let buf = &buf[..readed];
+        let header = Self::new(r#type, request_id, buf);
+        header.write_to_stream(writer, buf)
+    }
+
     fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
         let content_length = min(content.len(), MAX_LENGTH) as u16;
         Self {
@@ -135,7 +144,7 @@ impl BeginRequestRec {
 
 impl Debug for BeginRequestRec {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request).fmt(f)
+        Debug::fmt(&format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request), f)
     }
 }
 
@@ -182,6 +191,12 @@ pub(crate) type OutputMap = HashMap<u16, Output>;
 pub struct Output {
     stdout: Box<Read>,
     stderr: Box<Read>,
+}
+
+impl Debug for Output {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Debug::fmt(r#"Output {{ stdout: "", output: "" }}"#, f)
+    }
 }
 
 #[cfg(test)]

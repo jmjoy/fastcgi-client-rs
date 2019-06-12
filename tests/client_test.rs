@@ -6,10 +6,13 @@ use std::io;
 fn test_client() {
     env_logger::init();
 
-    let response = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
+    let mut client = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
         .build()
-        .unwrap()
-        .do_request(Params::new(), &mut io::empty());
+        .unwrap();
+
+    let response = client.do_request(Params::new(), &mut io::empty());
+
+    dbg!(response);
 
 //    let response = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
 //        .build()
