@@ -3,7 +3,9 @@ use std::io::{self, ErrorKind, Result, Read, Write};
 use crate::{ClientResult, ClientError};
 use byteorder::BigEndian;
 use std::net::TcpStream;
-use crate::meta::{VERSION_1, Address, OutputMap, Output, BeginRequestRec, Header, BeginRequest, RequestType, ReadWrite, Role};
+use crate::meta::{VERSION_1, Address, OutputMap, Output, BeginRequestRec, Header, BeginRequest, RequestType, ReadWrite, Role,
+    ParamsRec
+};
 use std::collections::HashMap;
 use crate::id::RequestIdGenerator;
 use log::{debug, info};
@@ -87,25 +89,24 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
-    pub fn do_request(&mut self, params: Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
+    pub fn do_request(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
         Ok(self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))?)
     }
 
-    fn handle_request(&mut self, id: u16, params: Params<'a>, body: &mut Read) -> ClientResult<()> {
+    fn handle_request(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
         info!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.builder.keep_alive)?;
         info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.write_to_stream(&mut self.stream)?;
 
-//        let content = &vec![0, ROLE_RESPONDER, keep_alive, 0, 0, 0, 0, 0];
-//        let mut request_buf = Self::build_packet(TYPE_BEGIN_REQUEST, content, id)?;
-//
-//        info!("[id = {}] Sended BeginRequest: {:?}", id, request_buf);
-//
+        let params_rec = ParamsRec::new(id, params)?;
+        info!("[id = {}] Send to stream: {:?}.", id, &params_rec);
+        params_rec.write_to_stream(&mut self.stream)?;
+
 //        let mut params_buf: Vec<u8> = Vec::new();
 //        let params: HashMap<&'a str, &'a str> = params.into();
 //        for (k, v) in params {

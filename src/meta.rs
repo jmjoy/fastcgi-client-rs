@@ -6,6 +6,7 @@ use std::fs::hard_link;
 use std::cmp::min;
 use std::fmt::{self, Debug};
 use std::convert::TryInto;
+use crate::Params;
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -78,14 +79,6 @@ impl Header {
     }
 }
 
-#[derive(Debug)]
-struct Record<'a> {
-    header: Header,
-    content: &'a [u8],
-}
-
-impl<'a> Record<'a> {}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum Role {
@@ -145,6 +138,98 @@ impl BeginRequestRec {
 impl Debug for BeginRequestRec {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         Debug::fmt(&format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request), f)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ParamLength {
+    Short(u8),
+    Long(u32),
+}
+
+impl ParamLength {
+    pub fn new(length: usize) -> Self {
+        if length < 128 {
+            ParamLength::Short(length as u8)
+        } else {
+            let mut length = length;
+            length |= 1 << 31;
+            ParamLength::Long(length as u32)
+        }
+    }
+
+    pub fn content(self) -> io::Result<Vec<u8>> {
+        let mut buf: Vec<u8> = Vec::new();
+        match self {
+            ParamLength::Short(l) => buf.push(l),
+            ParamLength::Long(l) => buf.write_u32::<BigEndian>(l)?,
+        }
+        Ok(buf)
+    }
+}
+
+#[derive(Debug)]
+pub struct ParamPair<'a> {
+    name_length: ParamLength,
+    value_length: ParamLength,
+    name_data: &'a str,
+    value_data: &'a str,
+}
+
+impl<'a> ParamPair<'a> {
+    fn new(name: &'a str, value: &'a str) -> Self {
+        let name_length = ParamLength::new(name.len());
+        let value_length = ParamLength::new(value.len());
+        Self {
+            name_length,
+            value_length,
+            name_data: name,
+            value_data: value,
+        }
+    }
+
+    fn write_to_stream(&self, writer: &mut Write) -> io::Result<()> {
+        writer.write_all(&self.name_length.content()?)?;
+        writer.write_all(&self.value_length.content()?)?;
+        writer.write_all(self.name_data.as_bytes())?;
+        writer.write_all(self.value_data.as_bytes())?;
+        Ok(())
+    }
+}
+
+pub struct ParamsRec<'a> {
+    pub(crate) header: Header,
+    pub(crate) param_pairs: Vec<ParamPair<'a>>,
+    pub(crate) content: Vec<u8>,
+}
+
+impl<'a> ParamsRec<'a> {
+    pub fn new(request_id: u16, params: &Params<'a>) -> io::Result<Self> {
+        let mut buf: Vec<u8> = Vec::new();
+        let mut param_pairs = Vec::new();
+        for (name, value) in params.iter() {
+            let param_pair = ParamPair::new(name, value);
+            param_pair.write_to_stream(&mut buf);
+            param_pairs.push(param_pair);
+        }
+
+        let header = Header::new(RequestType::Params, request_id, &buf);
+
+        Ok(Self {
+            header,
+            param_pairs,
+            content: buf,
+        })
+    }
+
+    pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
+        self.header.write_to_stream(writer, &self.content)
+    }
+}
+
+impl<'a> Debug for ParamsRec<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Debug::fmt(&format!("ParamsRec {{header: {:?}, param_pairs: {:?}}}", self.header, self.param_pairs), f)
     }
 }
 
