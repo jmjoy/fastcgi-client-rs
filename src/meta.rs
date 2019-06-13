@@ -1,12 +1,14 @@
-use std::mem::size_of;
-use std::io::{self, Read, Write};
-use std::collections::HashMap;
-use byteorder::{WriteBytesExt, BigEndian};
-use std::fs::hard_link;
-use std::cmp::min;
-use std::fmt::{self, Debug};
-use std::convert::TryInto;
 use crate::Params;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::cmp::min;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::fmt::{self, Debug};
+use std::fs::hard_link;
+use std::io::{self, Read, Write};
+use std::mem::size_of;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -29,21 +31,48 @@ pub enum RequestType {
     Data = 8,
     GetValues = 9,
     GetValuesResult = 10,
+    UnknownType = 11,
+}
+
+impl RequestType {
+    fn from_u8(u: u8) -> Self {
+        match u {
+            1 => RequestType::BeginRequest,
+            2 => RequestType::AbortRequest,
+            3 => RequestType::EndRequest,
+            4 => RequestType::Params,
+            5 => RequestType::Stdin,
+            6 => RequestType::Stdout,
+            7 => RequestType::Stderr,
+            8 => RequestType::Data,
+            9 => RequestType::GetValues,
+            10 => RequestType::GetValuesResult,
+            _ => RequestType::UnknownType,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct Header {
-    pub(crate)   version: u8,
-    pub(crate)   r#type: RequestType,
-    pub(crate)   request_id: u16,
-    pub(crate)   content_length: u16,
-    pub(crate)   padding_length: u8,
-    pub(crate)   reserved: u8,
+    pub(crate) version: u8,
+    pub(crate) r#type: RequestType,
+    pub(crate) request_id: u16,
+    pub(crate) content_length: u16,
+    pub(crate) padding_length: u8,
+    pub(crate) reserved: u8,
 }
 
 impl Header {
-    pub(crate) fn write_to_stream_batches<F>(r#type: RequestType, request_id: u16, writer: &mut Write, content: &mut Read,
-                                             before_write: Option<F>) -> io::Result<()> where F: Fn(Header) -> Header {
+    pub(crate) fn write_to_stream_batches<F>(
+        r#type: RequestType,
+        request_id: u16,
+        writer: &mut Write,
+        content: &mut Read,
+        before_write: Option<F>,
+    ) -> io::Result<()>
+    where
+        F: Fn(Header) -> Header,
+    {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
         let read = content.read(&mut buf)?;
 
@@ -81,6 +110,28 @@ impl Header {
         writer.write_all(&vec![0; self.padding_length as usize]);
         Ok(())
     }
+
+    pub(crate) fn new_from_stream(reader: &mut Read) -> io::Result<Self> {
+        let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
+        reader.read_exact(&mut buf)?;
+
+        Ok(Self {
+            version: buf[0],
+            r#type: RequestType::from_u8(buf[1]),
+            request_id: (&buf[2..4]).read_u16::<BigEndian>()?,
+            content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
+            padding_length: buf[6],
+            reserved: buf[7],
+        })
+    }
+
+    pub(crate) fn read_content_from_stream(self, reader: &mut Read) -> io::Result<Vec<u8>> {
+        let mut buf = vec![0; self.content_length as usize];
+        reader.read_exact(&mut buf)?;
+        let mut padding_buf = vec![0; self.padding_length as usize];
+        reader.read_exact(&mut padding_buf)?;
+        Ok(buf)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -93,9 +144,9 @@ pub enum Role {
 
 #[derive(Debug)]
 pub(crate) struct BeginRequest {
-    pub(crate)   role: Role,
-    pub(crate)   flags: u8,
-    pub(crate)   reserved: [u8; 5],
+    pub(crate) role: Role,
+    pub(crate) flags: u8,
+    pub(crate) reserved: [u8; 5],
 }
 
 impl BeginRequest {
@@ -141,7 +192,13 @@ impl BeginRequestRec {
 
 impl Debug for BeginRequestRec {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        Debug::fmt(&format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request), f)
+        Debug::fmt(
+            &format!(
+                "BeginRequestRec {{header: {:?}, begin_request: {:?}}}",
+                self.header, self.begin_request
+            ),
+            f,
+        )
     }
 }
 
@@ -233,7 +290,13 @@ impl<'a> ParamsRec<'a> {
 
 impl<'a> Debug for ParamsRec<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        Debug::fmt(&format!("ParamsRec {{header: {:?}, param_pairs: {:?}}}", self.header, self.param_pairs), f)
+        Debug::fmt(
+            &format!(
+                "ParamsRec {{header: {:?}, param_pairs: {:?}}}",
+                self.header, self.param_pairs
+            ),
+            f,
+        )
     }
 }
 
@@ -277,14 +340,33 @@ struct Response {
 
 pub(crate) type OutputMap = HashMap<u16, Output>;
 
+#[derive(Default)]
 pub struct Output {
-    stdout: Box<Read>,
-    stderr: Box<Read>,
+    stdout: Option<Vec<u8>>,
+    stderr: Option<Vec<u8>>,
+}
+
+impl Output {
+    pub(crate) fn set_stdout(&mut self, stdout: Vec<u8>) {
+        self.stdout = Some(stdout);
+    }
+
+    pub(crate) fn set_stderr(&mut self, stderr: Vec<u8>) {
+        self.stderr = Some(stderr);
+    }
+
+    pub fn get_stdout(&self) -> Option<Vec<u8>> {
+        self.stdout.clone()
+    }
+
+    pub fn get_stderr(&self) -> Option<Vec<u8>> {
+        self.stderr.clone()
+    }
 }
 
 impl Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        Debug::fmt(r#"Output {{ stdout: "", output: "" }}"#, f)
+        Debug::fmt(&format!(r#"Output {{ stdout: "...", stderr: "..." }}"#), f)
     }
 }
 
@@ -297,4 +379,3 @@ mod test {
         assert_eq!(HEADER_LEN, 8);
     }
 }
-

@@ -1,6 +1,7 @@
-use std::io;
-use std::fmt::{self, Display, Formatter};
+use crate::meta::RequestType;
 use std::fmt::Debug;
+use std::fmt::{self, Display, Formatter};
+use std::io;
 
 pub type ClientResult<T> = Result<T, ClientError>;
 
@@ -9,6 +10,7 @@ pub enum ClientError {
     IoError(io::Error),
     ClientError(String),
     RequestIdNotFound(u16),
+    UnknownRequestType(RequestType),
 }
 
 impl Display for ClientError {
@@ -16,7 +18,12 @@ impl Display for ClientError {
         match self {
             ClientError::IoError(e) => Display::fmt(e, f),
             ClientError::ClientError(s) => Display::fmt(s, f),
-            ClientError::RequestIdNotFound(id) => Display::fmt(&format!("Request id `{}` not found.", id), f),
+            ClientError::RequestIdNotFound(id) => {
+                Display::fmt(&format!("Request id `{}` not found.", id), f)
+            }
+            ClientError::UnknownRequestType(r#type) => {
+                Display::fmt(&format!("Unknown request type `{:?}`.", r#type), f)
+            }
         }
     }
 }
@@ -28,4 +35,3 @@ impl From<io::Error> for ClientError {
         ClientError::IoError(e)
     }
 }
-

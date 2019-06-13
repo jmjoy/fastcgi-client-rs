@@ -6,8 +6,8 @@ use std::fmt::{self, Display, Formatter};
 use std::io::{self, ErrorKind, Read, Write};
 use std::mem::size_of;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::time::Duration;
 use std::sync::atomic::AtomicU16;
+use std::time::Duration;
 
 //
 //const TYPE_BEGIN_REQUEST: u8 = 1;
@@ -34,7 +34,6 @@ use std::sync::atomic::AtomicU16;
 //
 //
 
-
 mod client;
 mod error;
 mod id;
@@ -42,6 +41,6 @@ mod meta;
 mod params;
 
 pub use crate::client::{Client, ClientBuilder};
-pub use crate::error::{ClientResult, ClientError};
+pub use crate::error::{ClientError, ClientResult};
+pub use crate::meta::Address;
 pub use crate::params::Params;
-pub use crate::meta::{Address};
