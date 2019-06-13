@@ -9,16 +9,9 @@ use std::thread;
 fn test_client() {
     env_logger::init();
 
-    let mut client = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000))
-        .build()
-        .unwrap();
+    let mut client = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000)).build().unwrap();
 
-
-    let script_name = current_dir()
-        .unwrap()
-        .join("tests")
-        .join("php")
-        .join("index.php");
+    let script_name = current_dir().unwrap().join("tests").join("php").join("index.php");
 
     let script_name = script_name.to_str().unwrap();
 

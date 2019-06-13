@@ -1,8 +1,5 @@
 use crate::id::RequestIdGenerator;
-use crate::meta::{
-    Address, BeginRequest, BeginRequestRec, Header, Output, OutputMap, ParamsRec, ReadWrite,
-    RequestType, Role, VERSION_1,
-};
+use crate::meta::{Address, BeginRequest, BeginRequestRec, Header, Output, OutputMap, ParamsRec, ReadWrite, RequestType, Role, VERSION_1};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
 use byteorder::BigEndian;
@@ -90,26 +87,14 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
-    pub fn do_request(
-        &mut self,
-        params: &Params<'a>,
-        body: &mut Read,
-    ) -> ClientResult<&mut Output> {
+    pub fn do_request(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
-        Ok(self
-            .outputs
-            .get_mut(&id)
-            .ok_or(ClientError::RequestIdNotFound(id))?)
+        Ok(self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))?)
     }
 
-    fn handle_request(
-        &mut self,
-        id: u16,
-        params: &Params<'a>,
-        body: &mut Read,
-    ) -> ClientResult<()> {
+    fn handle_request(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
         info!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.builder.keep_alive)?;
@@ -209,9 +194,7 @@ impl<'a> Client<'a> {
     }
 
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs
-            .get_mut(&id)
-            .ok_or(ClientError::RequestIdNotFound(id))
+        self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))
     }
 
     //    fn build_packet(typ: u8, content: &[u8], request_id: u16) -> Result<Vec<u8>, ClientError> {

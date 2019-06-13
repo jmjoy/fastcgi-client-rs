@@ -18,12 +18,8 @@ impl Display for ClientError {
         match self {
             ClientError::IoError(e) => Display::fmt(e, f),
             ClientError::ClientError(s) => Display::fmt(s, f),
-            ClientError::RequestIdNotFound(id) => {
-                Display::fmt(&format!("Request id `{}` not found.", id), f)
-            }
-            ClientError::UnknownRequestType(r#type) => {
-                Display::fmt(&format!("Unknown request type `{:?}`.", r#type), f)
-            }
+            ClientError::RequestIdNotFound(id) => Display::fmt(&format!("Request id `{}` not found.", id), f),
+            ClientError::UnknownRequestType(r#type) => Display::fmt(&format!("Unknown request type `{:?}`.", r#type), f),
         }
     }
 }

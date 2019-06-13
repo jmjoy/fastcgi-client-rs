@@ -193,10 +193,7 @@ impl BeginRequestRec {
 impl Debug for BeginRequestRec {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         Debug::fmt(
-            &format!(
-                "BeginRequestRec {{header: {:?}, begin_request: {:?}}}",
-                self.header, self.begin_request
-            ),
+            &format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request),
             f,
         )
     }
@@ -291,10 +288,7 @@ impl<'a> ParamsRec<'a> {
 impl<'a> Debug for ParamsRec<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         Debug::fmt(
-            &format!(
-                "ParamsRec {{header: {:?}, param_pairs: {:?}}}",
-                self.header, self.param_pairs
-            ),
+            &format!("ParamsRec {{header: {:?}, param_pairs: {:?}}}", self.header, self.param_pairs),
             f,
         )
     }
