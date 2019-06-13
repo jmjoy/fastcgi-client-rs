@@ -150,11 +150,9 @@ impl<'a> Client<'a> {
                     let content = header.read_content_from_stream(&mut self.stream)?;
                     self.get_output_mut(id)?.set_stderr(content)
                 }
-                RequestType::EndRequest => panic!("等会处理"),
+                RequestType::EndRequest => break,
                 r#type => return Err(ClientError::UnknownRequestType(r#type)),
             }
-
-            break;
 
             //            let response = match self.read_packet() {
             //                Ok(response) => response,

@@ -13,18 +13,20 @@ fn test_client() {
         .build()
         .unwrap();
 
-    let params = Params::with_predefine().set_script_name(
-        current_dir()
-            .unwrap()
-            .join("tests")
-            .join("php")
-            .join("index.php")
-            .to_str()
-            .unwrap(),
-    );
+
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("index.php");
+
+    let script_name = script_name.to_str().unwrap();
+
+    let params = Params::with_predefine().set_script_name(script_name);
     let output = client.do_request(&params, &mut io::empty()).unwrap();
     dbg!(&output);
     dbg!(String::from_utf8(output.get_stdout().unwrap()));
+    dbg!(String::from_utf8(output.get_stderr().unwrap()));
 
     //    let mut client = Arc::new(client);
     //
