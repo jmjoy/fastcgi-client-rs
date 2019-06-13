@@ -42,12 +42,16 @@ pub(crate) struct Header {
 }
 
 impl Header {
-    fn write_to_stream_batches(r#type: RequestType, request_id: u16, writer: &mut Write, content: &mut Read) -> io::Result<()> {
+    pub(crate) fn write_to_stream_batches<F>(r#type: RequestType, request_id: u16, writer: &mut Write, content: &mut Read,
+                                             before_write: Option<F>) -> io::Result<()> where F: Fn(Header) -> Header {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
-        let readed = content.read(&mut buf)?;
+        let read = content.read(&mut buf)?;
 
-        let buf = &buf[..readed];
-        let header = Self::new(r#type, request_id, buf);
+        let buf = &buf[..read];
+        let mut header = Self::new(r#type, request_id, buf);
+        if let Some(before_write) = before_write {
+            header = before_write(header);
+        }
         header.write_to_stream(writer, buf)
     }
 

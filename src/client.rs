@@ -107,6 +107,11 @@ impl<'a> Client<'a> {
         info!("[id = {}] Send to stream: {:?}.", id, &params_rec);
         params_rec.write_to_stream(&mut self.stream)?;
 
+        Header::write_to_stream_batches(RequestType::Stdin, id, &mut self.stream, body, Some(|header| {
+            info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+            header
+        }))?;
+
 //        let mut params_buf: Vec<u8> = Vec::new();
 //        let params: HashMap<&'a str, &'a str> = params.into();
 //        for (k, v) in params {

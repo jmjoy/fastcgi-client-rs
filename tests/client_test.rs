@@ -10,7 +10,7 @@ fn test_client() {
         .build()
         .unwrap();
 
-    let response = client.do_request(&Params::with_predefine(), &mut io::empty());
+    let response = client.do_request(&Params::with_predefine(), &mut vec!['a'; 1024]);
 
     dbg!(response);
 
