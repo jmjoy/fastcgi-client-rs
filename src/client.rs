@@ -14,6 +14,8 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
+/// Builder for fastcgi client, with connect/read/write timeout setting,
+/// and keep-alive setting, etc.
 pub struct ClientBuilder<'a> {
     address: Address<'a>,
     connect_timeout: Option<Duration>,
@@ -23,6 +25,7 @@ pub struct ClientBuilder<'a> {
 }
 
 impl<'a> ClientBuilder<'a> {
+    /// New Builder with fastcgi address info.
     pub fn new(address: Address<'a>) -> Self {
         Self {
             address,
@@ -33,30 +36,36 @@ impl<'a> ClientBuilder<'a> {
         }
     }
 
+    /// Set fastcgi server connection connect timeout, when you use `tcp` address, unless `unix-sock`.
     pub fn set_connect_timeout(mut self, connect_timeout: Option<Duration>) -> Self {
         self.connect_timeout = connect_timeout;
         self
     }
 
+    /// Set fastcgi server connection read timeout.
     pub fn set_read_timeout(mut self, read_timeout: Option<Duration>) -> Self {
         self.read_timeout = read_timeout;
         self
     }
 
+    /// Set fastcgi server connection write timeout.
     pub fn set_write_timeout(mut self, write_timeout: Option<Duration>) -> Self {
         self.write_timeout = write_timeout;
         self
     }
 
+    /// Set fastcgi server connection read & write timeout.
     pub fn set_read_write_timeout(self, timeout: Option<Duration>) -> Self {
         self.set_read_timeout(timeout).set_write_timeout(timeout)
     }
 
+    /// Set fastcgi protocol flags, keepalive feature.
     pub fn set_keep_alive(mut self, keep_alive: bool) -> Self {
         self.keep_alive = keep_alive;
         self
     }
 
+    /// Build a client and really connect to fastcgi server.
     pub fn build(self) -> io::Result<Client<'a>> {
         let stream: Box<ReadWrite> = match self.address {
             Address::Tcp(host, port) => {
@@ -95,6 +104,7 @@ impl<'a> ClientBuilder<'a> {
     }
 }
 
+/// Client for handling communication between fastcgi server.
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
     stream: Box<ReadWrite>,
@@ -102,6 +112,11 @@ pub struct Client<'a> {
 }
 
 impl<'a> Client<'a> {
+    /// Send request and receive response from fastcgi server.
+    /// - `params` fastcgi params.
+    /// - `body` always the http post or put body.
+    ///
+    /// return the output of fastcgi stdout and stderr.
     pub fn do_request(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
@@ -116,7 +131,6 @@ impl<'a> Client<'a> {
         info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.write_to_stream(&mut self.stream)?;
 
-        dbg!(params);
         let param_pairs = ParamPairs::new(params);
         info!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
 

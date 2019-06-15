@@ -4,14 +4,21 @@ use std::fmt::{self, Display, Formatter};
 
 use std::io;
 
+/// Result of ClientError.
 pub type ClientResult<T> = Result<T, ClientError>;
 
+/// Client error, contain `std::io::Error` and some fastcgi specify error.
 #[derive(Debug)]
 pub enum ClientError {
+    /// Wrap of `std::io::Error`.
     IoError(io::Error),
+    /// Usually not happen.
     RequestIdNotFound(u16),
+    /// Usually not happen.
     ResponseNotFound(u16),
+    /// Maybe unimplemented request type received fom response.
     UnknownRequestType(RequestType),
+    /// Response not complete, first is protocol status and second is app status, see fastcgi protocol.
     EndRequest(ProtocolStatus, u32),
 }
 

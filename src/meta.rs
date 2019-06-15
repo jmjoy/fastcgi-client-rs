@@ -365,9 +365,15 @@ impl EndRequestRec {
     }
 }
 
+/// Fastcgi server address.
 #[derive(Debug)]
 pub enum Address<'a> {
+    /// Tcp connection info.
+    /// - `0` host.
+    /// - `1` port.
     Tcp(&'a str, u16),
+    /// Unix socket info.
+    /// - `0` path of unix-sock file.
     UnixSock(&'a str),
 }
 

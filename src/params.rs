@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
+/// Fastcgi params, please reference to nginx-php-fpm fastcgi_params.
 #[derive(Default, Debug)]
 pub struct Params<'a>(HashMap<&'a str, &'a str>);
 
