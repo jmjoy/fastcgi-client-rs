@@ -75,14 +75,24 @@ impl Header {
         F: Fn(Header) -> Header,
     {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
-        let read = content.read(&mut buf)?;
+        let mut had_writen = false;
 
-        let buf = &buf[..read];
-        let mut header = Self::new(r#type, request_id, buf);
-        if let Some(before_write) = before_write {
-            header = before_write(header);
+        loop {
+            let read = content.read(&mut buf)?;
+            if had_writen && (read == 0 || read < MAX_LENGTH) {
+                break;
+            }
+
+            let buf = &buf[..read];
+            let mut header = Self::new(r#type.clone(), request_id, buf);
+            if let Some(ref f) = before_write {
+                header = f(header);
+            }
+            header.write_to_stream(writer, buf)?;
+
+            had_writen = true;
         }
-        header.write_to_stream(writer, buf)
+        Ok(())
     }
 
     fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
