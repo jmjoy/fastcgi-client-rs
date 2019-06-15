@@ -37,6 +37,11 @@ impl<'a> Params<'a> {
         self
     }
 
+    pub fn set_script_filename(mut self, script_filename: &'a str) -> Self {
+        self.insert("SCRIPT_FILENAME", script_filename);
+        self
+    }
+
     pub fn set_script_name(mut self, script_name: &'a str) -> Self {
         self.insert("SCRIPT_NAME", script_name);
         self

@@ -1,4 +1,4 @@
 <?php
 
 echo "hello";
-// throw new Exception("FUCK");
+throw new Exception("FUCK");

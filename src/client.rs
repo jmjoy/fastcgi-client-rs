@@ -103,6 +103,7 @@ impl<'a> Client<'a> {
         info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.write_to_stream(&mut self.stream)?;
 
+        dbg!(params);
         let param_pairs = ParamPairs::new(params);
         info!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
 
