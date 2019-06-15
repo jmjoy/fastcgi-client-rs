@@ -1,5 +1,6 @@
+use crate::error::{ClientError, ClientResult};
 use crate::Params;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -18,7 +19,7 @@ pub(crate) trait ReadWrite: Read + Write {}
 
 impl<T> ReadWrite for T where T: Read + Write {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum RequestType {
     BeginRequest = 1,
@@ -52,7 +53,7 @@ impl RequestType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Header {
     pub(crate) version: u8,
     pub(crate) r#type: RequestType,
@@ -125,7 +126,7 @@ impl Header {
         })
     }
 
-    pub(crate) fn read_content_from_stream(self, reader: &mut Read) -> io::Result<Vec<u8>> {
+    pub(crate) fn read_content_from_stream(&self, reader: &mut Read) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf)?;
         let mut padding_buf = vec![0; self.padding_length as usize];
@@ -281,6 +282,7 @@ impl<'a> ParamsRec<'a> {
     }
 
     pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
+        dbg!(String::from_utf8(self.content.clone()));
         self.header.write_to_stream(writer, &self.content)
     }
 }
@@ -295,6 +297,45 @@ impl<'a> Debug for ParamsRec<'a> {
 }
 
 #[derive(Debug)]
+pub(crate) struct ParamPairs<'a>(Vec<ParamPair<'a>>);
+
+impl<'a> ParamPairs<'a> {
+    pub(crate) fn new(params: &Params<'a>) -> Self {
+        let mut param_pairs = Vec::new();
+        for (name, value) in params.iter() {
+            let param_pair = ParamPair::new(name, value);
+            param_pairs.push(param_pair);
+        }
+
+        Self(param_pairs)
+    }
+
+    pub(crate) fn to_content(&self) -> io::Result<Vec<u8>> {
+        let mut buf: Vec<u8> = Vec::new();
+
+        for param_pair in self.iter() {
+            param_pair.write_to_stream(&mut buf);
+        }
+
+        Ok(buf)
+    }
+}
+
+impl<'a> Deref for ParamPairs<'a> {
+    type Target = Vec<ParamPair<'a>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> DerefMut for ParamPairs<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug)]
 #[repr(u8)]
 pub enum ProtocolStatus {
     RequestComplete = 0,
@@ -303,16 +344,55 @@ pub enum ProtocolStatus {
     UnknownRole = 3,
 }
 
+impl ProtocolStatus {
+    pub fn from_u8(u: u8) -> Self {
+        match u {
+            0 => ProtocolStatus::RequestComplete,
+            1 => ProtocolStatus::CantMpxConn,
+            2 => ProtocolStatus::Overloaded,
+            _ => ProtocolStatus::UnknownRole,
+        }
+    }
+
+    pub(crate) fn to_client_result(self, app_status: u32) -> ClientResult<()> {
+        match self {
+            ProtocolStatus::RequestComplete => Ok(()),
+            _ => Err(ClientError::EndRequest(self, app_status)),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct EndRequest {
-    app_status: u32,
-    protocol_status: ProtocolStatus,
+    pub(crate) app_status: u32,
+    pub(crate) protocol_status: ProtocolStatus,
     reserved: [u8; 3],
 }
 
-struct EndRequestRec {
+#[derive(Debug)]
+pub(crate) struct EndRequestRec {
     header: Header,
-    end_request: EndRequest,
+    pub(crate) end_request: EndRequest,
+}
+
+impl EndRequestRec {
+    pub(crate) fn from_header(header: &Header, reader: &mut Read) -> io::Result<Self> {
+        let header = header.clone();
+        let mut content = &*header.read_content_from_stream(reader)?;
+        let app_status = content.read_u32::<BigEndian>()?;
+        let protocol_status = ProtocolStatus::from_u8(content.read_u8()?);
+        let mut reserved: [u8; 3] = [0; 3];
+        content.read_exact(&mut reserved)?;
+
+        Ok(Self {
+            header,
+            end_request: EndRequest {
+                app_status,
+                protocol_status,
+                reserved,
+            },
+        })
+    }
 }
 
 #[derive(Debug)]
