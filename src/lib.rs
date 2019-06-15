@@ -1,3 +1,5 @@
+//! Fastcgi client implemented for Rust.
+
 mod client;
 mod error;
 mod id;
