@@ -11,6 +11,9 @@ use std::net::ToSocketAddrs as _;
 
 use std::time::Duration;
 
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
+
 pub struct ClientBuilder<'a> {
     address: Address<'a>,
     connect_timeout: Option<Duration>,
@@ -55,21 +58,33 @@ impl<'a> ClientBuilder<'a> {
     }
 
     pub fn build(self) -> io::Result<Client<'a>> {
-        let stream = match self.address {
-            Address::Tcp(host, port) => match self.connect_timeout {
-                Some(connect_timeout) => {
-                    let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| {
-                        io::Error::new(
-                            ErrorKind::NotFound,
-                            "This should not happen, but if it happen, \
-                             it means that your address is incorrect.",
-                        )
-                    })?;
-                    TcpStream::connect_timeout(&addr, connect_timeout)?
+        let stream: Box<ReadWrite> = match self.address {
+            Address::Tcp(host, port) => {
+                let stream = match self.connect_timeout {
+                    Some(connect_timeout) => {
+                        let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| {
+                            io::Error::new(
+                                ErrorKind::NotFound,
+                                "This should not happen, but if it happen, \
+                                 it means that your address is incorrect.",
+                            )
+                        })?;
+                        TcpStream::connect_timeout(&addr, connect_timeout)?
+                    }
+                    None => TcpStream::connect((host, port))?,
+                };
+                stream.set_read_timeout(self.read_timeout)?;
+                stream.set_write_timeout(self.write_timeout)?;
+                Box::new(stream)
+            }
+            Address::UnixSock(path) => {
+                if cfg!(unix) {
+                    let stream = UnixStream::connect(path)?;
+                    Box::new(stream)
+                } else {
+                    panic!("Unix socket not support for your operate system.")
                 }
-                None => TcpStream::connect((host, port))?,
-            },
-            Address::UnixSock(_path) => unimplemented!(),
+            }
         };
 
         Ok(Client {
