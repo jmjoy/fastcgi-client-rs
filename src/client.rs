@@ -1,16 +1,14 @@
 use crate::id::RequestIdGenerator;
-use crate::meta::{
-    Address, BeginRequest, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, ParamsRec, ReadWrite, RequestType, Role, VERSION_1,
-};
+use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, ReadWrite, RequestType, Role};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
-use byteorder::BigEndian;
-use log::{debug, info};
+
+use log::info;
 use std::collections::HashMap;
-use std::io::{self, ErrorKind, Read, Result, Write};
+use std::io::{self, ErrorKind, Read};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs as _;
-use std::rc::Rc;
+
 use std::time::Duration;
 
 pub struct ClientBuilder<'a> {
@@ -93,7 +91,7 @@ impl<'a> Client<'a> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
-        Ok(self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))?)
+        Ok(self.outputs.get_mut(&id).ok_or_else(|| ClientError::RequestIdNotFound(id))?)
     }
 
     fn handle_request(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
@@ -135,7 +133,7 @@ impl<'a> Client<'a> {
     fn handle_response(&mut self, id: u16) -> ClientResult<()> {
         self.init_output(id);
 
-        let mut global_end_request_rec = None;
+        let global_end_request_rec: Option<EndRequestRec>;
 
         loop {
             let header = Header::new_from_stream(&mut self.stream)?;
@@ -168,7 +166,7 @@ impl<'a> Client<'a> {
             Some(end_request_rec) => end_request_rec
                 .end_request
                 .protocol_status
-                .to_client_result(end_request_rec.end_request.app_status),
+                .convert_to_client_result(end_request_rec.end_request.app_status),
             None => unreachable!(),
         }
     }
@@ -178,6 +176,6 @@ impl<'a> Client<'a> {
     }
 
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or(ClientError::RequestIdNotFound(id))
+        self.outputs.get_mut(&id).ok_or_else(|| ClientError::RequestIdNotFound(id))
     }
 }

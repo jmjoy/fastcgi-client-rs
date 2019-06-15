@@ -1,15 +1,14 @@
 use crate::error::{ClientError, ClientResult};
 use crate::Params;
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::cmp::min;
 use std::collections::HashMap;
-use std::convert::TryInto;
+
 use std::fmt::{self, Debug};
-use std::fs::hard_link;
+
 use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -118,7 +117,7 @@ impl Header {
 
         writer.write_all(&buf)?;
         writer.write_all(content)?;
-        writer.write_all(&vec![0; self.padding_length as usize]);
+        writer.write_all(&vec![0; self.padding_length as usize])?;
         Ok(())
     }
 
@@ -147,6 +146,7 @@ impl Header {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
+#[allow(dead_code)]
 pub enum Role {
     Responder = 1,
     Authorizer = 2,
@@ -266,46 +266,6 @@ impl<'a> ParamPair<'a> {
     }
 }
 
-pub struct ParamsRec<'a> {
-    pub(crate) header: Header,
-    pub(crate) param_pairs: Vec<ParamPair<'a>>,
-    pub(crate) content: Vec<u8>,
-}
-
-impl<'a> ParamsRec<'a> {
-    pub fn new(request_id: u16, params: &Params<'a>) -> io::Result<Self> {
-        let mut buf: Vec<u8> = Vec::new();
-        let mut param_pairs = Vec::new();
-        for (name, value) in params.iter() {
-            let param_pair = ParamPair::new(name, value);
-            param_pair.write_to_stream(&mut buf);
-            param_pairs.push(param_pair);
-        }
-
-        let header = Header::new(RequestType::Params, request_id, &buf);
-
-        Ok(Self {
-            header,
-            param_pairs,
-            content: buf,
-        })
-    }
-
-    pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
-        dbg!(String::from_utf8(self.content.clone()));
-        self.header.write_to_stream(writer, &self.content)
-    }
-}
-
-impl<'a> Debug for ParamsRec<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        Debug::fmt(
-            &format!("ParamsRec {{header: {:?}, param_pairs: {:?}}}", self.header, self.param_pairs),
-            f,
-        )
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct ParamPairs<'a>(Vec<ParamPair<'a>>);
 
@@ -324,7 +284,7 @@ impl<'a> ParamPairs<'a> {
         let mut buf: Vec<u8> = Vec::new();
 
         for param_pair in self.iter() {
-            param_pair.write_to_stream(&mut buf);
+            param_pair.write_to_stream(&mut buf)?;
         }
 
         Ok(buf)
@@ -364,7 +324,7 @@ impl ProtocolStatus {
         }
     }
 
-    pub(crate) fn to_client_result(self, app_status: u32) -> ClientResult<()> {
+    pub(crate) fn convert_to_client_result(self, app_status: u32) -> ClientResult<()> {
         match self {
             ProtocolStatus::RequestComplete => Ok(()),
             _ => Err(ClientError::EndRequest(self, app_status)),
@@ -411,17 +371,6 @@ pub enum Address<'a> {
     UnixSock(&'a str),
 }
 
-#[derive(Debug)]
-struct Response {
-    version: u8,
-    typ: u8,
-    request_id: u16,
-    content_length: u16,
-    padding_length: u8,
-    reserved: u8,
-    content: Vec<u8>,
-}
-
 pub(crate) type OutputMap = HashMap<u16, Output>;
 
 #[derive(Default)]
@@ -450,7 +399,7 @@ impl Output {
 
 impl Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        Debug::fmt(&format!(r#"Output {{ stdout: "...", stderr: "..." }}"#), f)
+        Debug::fmt(r#"Output { stdout: "...", stderr: "..." }"#, f)
     }
 }
 

@@ -1,9 +1,7 @@
 use fastcgi_client::{Address, ClientBuilder, Params};
 use std::env::current_dir;
-use std::error::Error;
-use std::io::{self, Read as _};
-use std::sync::Arc;
-use std::thread;
+
+use std::io;
 
 #[test]
 fn test_client() {
@@ -21,11 +19,11 @@ fn test_client() {
         .set_script_filename(script_name)
         .set_request_uri("/index.php")
         .set_document_uri("/index.php")
-//        .set_remote_addr("127.0.0.1")
-//        .set_remote_port("12345")
-//        .set_server_addr("127.0.0.1")
-//        .set_server_port("80")
-//        .set_server_name("jmjoy-pc")
+        //        .set_remote_addr("127.0.0.1")
+        //        .set_remote_port("12345")
+        //        .set_server_addr("127.0.0.1")
+        //        .set_server_port("80")
+        //        .set_server_name("jmjoy-pc")
         .set_content_type("")
         .set_content_length("0");
     let output = client.do_request(&params, &mut io::empty()).unwrap();

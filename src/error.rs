@@ -1,7 +1,7 @@
 use crate::meta::{ProtocolStatus, RequestType};
-use std::fmt::Debug;
+
 use std::fmt::{self, Display, Formatter};
-use std::hint::unreachable_unchecked;
+
 use std::io;
 
 pub type ClientResult<T> = Result<T, ClientError>;
