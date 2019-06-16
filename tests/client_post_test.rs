@@ -35,9 +35,11 @@ fn test() {
         .set_content_length(&len);
     let output = client.do_request(&params, &mut &body[..]).unwrap();
 
-    assert_eq!(
-        &*output.get_stdout().unwrap_or(Default::default()),
-        &b"Status: 500 Internal Server Error\r\nContent-type: text/html; charset=UTF-8\r\n\r\n1234"[..]
-    );
-    assert_eq!(output.get_stderr().unwrap_or(Default::default()), &b"PHP message: PHP Fatal error:  Uncaught Exception: TEST in /home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php:3\nStack trace:\n#0 {main}\n  thrown in /home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php on line 3\n"[..]);
+    let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
+    assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+    assert!(stdout.contains("\r\n\r\n"));
+    assert!(stdout.contains("1234"));
+
+    let stderr = String::from_utf8(output.get_stderr().unwrap_or(Default::default())).unwrap();
+    assert!(stderr.contains("PHP message: PHP Fatal error:  Uncaught Exception: TEST"));
 }

@@ -32,9 +32,9 @@ fn test() {
         .set_content_length("0");
     let output = client.do_request(&params, &mut io::empty()).unwrap();
 
-    assert_eq!(
-        &*output.get_stdout().unwrap_or(Default::default()),
-        &b"Content-type: text/html; charset=UTF-8\r\n\r\nhello"[..]
-    );
+    let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
+    assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+    assert!(stdout.contains("\r\n\r\n"));
+    assert!(stdout.contains("hello"));
     assert_eq!(output.get_stderr(), None);
 }
