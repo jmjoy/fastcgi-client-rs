@@ -1,3 +1,12 @@
 language: rust
+
 rust:
   - stable
+
+services:
+  - docker
+
+before_install:
+  - docker pull php:7.1.30-fpm
+  - docker run -d --name php-fpm -p 9000:9000 php:7.1.30-fpm
+  - docker ps -a
