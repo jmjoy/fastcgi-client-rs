@@ -57,6 +57,11 @@ impl<'a> Params<'a> {
         self
     }
 
+    pub fn set_document_root(mut self, document_root: &'a str) -> Self {
+        self.insert("DOCUMENT_ROOT", document_root);
+        self
+    }
+
     pub fn set_document_uri(mut self, document_uri: &'a str) -> Self {
         self.insert("DOCUMENT_URI", document_uri);
         self

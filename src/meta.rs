@@ -118,6 +118,7 @@ impl Header {
         writer.write_all(&buf)?;
         writer.write_all(content)?;
         writer.write_all(&vec![0; self.padding_length as usize])?;
+
         Ok(())
     }
 
@@ -387,11 +388,17 @@ pub struct Output {
 
 impl Output {
     pub(crate) fn set_stdout(&mut self, stdout: Vec<u8>) {
-        self.stdout = Some(stdout);
+        match self.stdout {
+            Some(ref mut buf) => buf.extend(stdout.iter()),
+            None => self.stdout = Some(stdout),
+        }
     }
 
     pub(crate) fn set_stderr(&mut self, stderr: Vec<u8>) {
-        self.stderr = Some(stderr);
+        match self.stderr {
+            Some(ref mut buf) => buf.extend(stderr.iter()),
+            None => self.stderr = Some(stderr),
+        }
     }
 
     pub fn get_stdout(&self) -> Option<Vec<u8>> {

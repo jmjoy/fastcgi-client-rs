@@ -1,11 +1,11 @@
 use crate::id::RequestIdGenerator;
-use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, ReadWrite, RequestType, Role};
+use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
 
 use log::info;
 use std::collections::HashMap;
-use std::io::{self, ErrorKind, Read};
+use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs as _;
 
@@ -67,7 +67,7 @@ impl<'a> ClientBuilder<'a> {
 
     /// Build a client and really connect to fastcgi server.
     pub fn build(self) -> io::Result<Client<'a>> {
-        let stream: Box<ReadWrite> = match self.address {
+        let streams: (Box<Read>, Box<Write>) = match self.address {
             Address::Tcp(host, port) => {
                 let stream = match self.connect_timeout {
                     Some(connect_timeout) => {
@@ -84,12 +84,12 @@ impl<'a> ClientBuilder<'a> {
                 };
                 stream.set_read_timeout(self.read_timeout)?;
                 stream.set_write_timeout(self.write_timeout)?;
-                Box::new(stream)
+                (Box::new(stream.try_clone()?), Box::new(stream))
             }
             Address::UnixSock(path) => {
                 if cfg!(unix) {
                     let stream = UnixStream::connect(path)?;
-                    Box::new(stream)
+                    (Box::new(stream.try_clone()?), Box::new(stream))
                 } else {
                     panic!("Unix socket not support for your operate system.")
                 }
@@ -98,7 +98,8 @@ impl<'a> ClientBuilder<'a> {
 
         Ok(Client {
             builder: self,
-            stream: Box::new(stream),
+            read_stream: Box::new(streams.0),
+            write_stream: Box::new(BufWriter::new(streams.1)),
             outputs: HashMap::new(),
         })
     }
@@ -107,7 +108,8 @@ impl<'a> ClientBuilder<'a> {
 /// Client for handling communication between fastcgi server.
 pub struct Client<'a> {
     builder: ClientBuilder<'a>,
-    stream: Box<ReadWrite>,
+    read_stream: Box<Read>,
+    write_stream: Box<Write>,
     outputs: OutputMap,
 }
 
@@ -125,11 +127,13 @@ impl<'a> Client<'a> {
     }
 
     fn handle_request(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
+        let write_stream = &mut self.write_stream;
+
         info!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.builder.keep_alive)?;
         info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
-        begin_request_rec.write_to_stream(&mut self.stream)?;
+        begin_request_rec.write_to_stream(write_stream)?;
 
         let param_pairs = ParamPairs::new(params);
         info!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
@@ -137,8 +141,19 @@ impl<'a> Client<'a> {
         Header::write_to_stream_batches(
             RequestType::Params,
             id,
-            &mut self.stream,
+            write_stream,
             &mut &param_pairs.to_content()?[..],
+            Some(|header| {
+                info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                header
+            }),
+        )?;
+
+        Header::write_to_stream_batches(
+            RequestType::Params,
+            id,
+            write_stream,
+            &mut io::empty(),
             Some(|header| {
                 info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
@@ -148,13 +163,26 @@ impl<'a> Client<'a> {
         Header::write_to_stream_batches(
             RequestType::Stdin,
             id,
-            &mut self.stream,
+            write_stream,
             body,
             Some(|header| {
                 info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
             }),
         )?;
+
+        Header::write_to_stream_batches(
+            RequestType::Stdin,
+            id,
+            write_stream,
+            &mut io::empty(),
+            Some(|header| {
+                info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                header
+            }),
+        )?;
+
+        write_stream.flush()?;
 
         Ok(())
     }
@@ -165,7 +193,8 @@ impl<'a> Client<'a> {
         let global_end_request_rec: Option<EndRequestRec>;
 
         loop {
-            let header = Header::new_from_stream(&mut self.stream)?;
+            let read_stream = &mut self.read_stream;
+            let header = Header::new_from_stream(read_stream)?;
             info!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
@@ -174,15 +203,15 @@ impl<'a> Client<'a> {
 
             match header.r#type {
                 RequestType::Stdout => {
-                    let content = header.read_content_from_stream(&mut self.stream)?;
+                    let content = header.read_content_from_stream(read_stream)?;
                     self.get_output_mut(id)?.set_stdout(content)
                 }
                 RequestType::Stderr => {
-                    let content = header.read_content_from_stream(&mut self.stream)?;
+                    let content = header.read_content_from_stream(read_stream)?;
                     self.get_output_mut(id)?.set_stderr(content)
                 }
                 RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_header(&header, &mut self.stream)?;
+                    let end_request_rec = EndRequestRec::from_header(&header, read_stream)?;
                     info!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
                     global_end_request_rec = Some(end_request_rec);
                     break;
