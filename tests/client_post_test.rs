@@ -41,5 +41,6 @@ fn test() {
     assert!(stdout.contains("1234"));
 
     let stderr = String::from_utf8(output.get_stderr().unwrap_or(Default::default())).unwrap();
+    let stderr = dbg!(stderr);
     assert!(stderr.contains("PHP message: PHP Fatal error:  Uncaught Exception: TEST"));
 }
