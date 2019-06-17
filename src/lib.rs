@@ -36,6 +36,7 @@
 //! // Fetch fastcgi server(php-fpm) response.
 //! let output = client.do_request(&params, &mut io::empty()).unwrap();
 //!
+//! // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
 //! let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
 //! dbg!(&stdout);
 //!
