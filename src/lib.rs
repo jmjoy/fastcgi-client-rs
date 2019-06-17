@@ -36,10 +36,11 @@
 //! // Fetch fastcgi server(php-fpm) response.
 //! let output = client.do_request(&params, &mut io::empty()).unwrap();
 //!
-//! assert_eq!(
-//!     output.get_stdout().unwrap(),
-//!     "Content-type: text/html; charset=UTF-8\r\n\r\nhello".as_bytes()
-//! );
+//! let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+//! dbg!(&stdout);
+//!
+//! assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+//! assert!(stdout.contains("hello"));
 //! assert_eq!(output.get_stderr(), None);
 //! ```
 //!
