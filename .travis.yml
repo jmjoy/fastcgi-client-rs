@@ -11,5 +11,5 @@ before_install:
   - docker run -d --name php-fpm -p 9000:9000 -v /home/travis/build/jmjoy/:/home/travis/build/jmjoy/ php:7.1.30-fpm -c /usr/local/etc/php/php.ini-development
   - docker ps -a
 
-env
+env:
   - RUST_LOG=fastcgi_client
