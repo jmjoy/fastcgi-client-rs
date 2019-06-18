@@ -5,7 +5,7 @@ use crate::{ClientError, ClientResult};
 
 use log::info;
 use std::collections::HashMap;
-use std::io::{self, BufWriter, ErrorKind, Read, Write};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs as _;
 
@@ -84,12 +84,13 @@ impl<'a> ClientBuilder<'a> {
                 };
                 stream.set_read_timeout(self.read_timeout)?;
                 stream.set_write_timeout(self.write_timeout)?;
-                (Box::new(stream.try_clone()?), Box::new(stream))
+                (Box::new(BufReader::new(stream.try_clone()?)), Box::new(BufWriter::new(stream)))
             }
+            #[cfg(unix)]
             Address::UnixSock(path) => {
                 if cfg!(unix) {
                     let stream = UnixStream::connect(path)?;
-                    (Box::new(stream.try_clone()?), Box::new(stream))
+                    (Box::new(BufReader::new(stream.try_clone()?)), Box::new(BufWriter::new(stream)))
                 } else {
                     panic!("Unix socket not support for your operate system.")
                 }
@@ -98,8 +99,8 @@ impl<'a> ClientBuilder<'a> {
 
         Ok(Client {
             builder: self,
-            read_stream: Box::new(streams.0),
-            write_stream: Box::new(BufWriter::new(streams.1)),
+            read_stream: streams.0,
+            write_stream: streams.1,
             outputs: HashMap::new(),
         })
     }

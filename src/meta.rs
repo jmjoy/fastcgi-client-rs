@@ -373,6 +373,7 @@ pub enum Address<'a> {
     /// - `0` host.
     /// - `1` port.
     Tcp(&'a str, u16),
+    #[cfg(unix)]
     /// Unix socket info.
     /// - `0` path of unix-sock file.
     UnixSock(&'a str),
@@ -380,6 +381,7 @@ pub enum Address<'a> {
 
 pub(crate) type OutputMap = HashMap<u16, Output>;
 
+/// Output of fastcgi request, contains STDOUT and STDERR.
 #[derive(Default)]
 pub struct Output {
     stdout: Option<Vec<u8>>,
