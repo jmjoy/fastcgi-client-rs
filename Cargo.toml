@@ -1,12 +1,13 @@
 [package]
 name = "fastcgi-client"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["__JM_Joy__ <918734043@qq.com>"]
 edition = "2018"
 description = "Fastcgi client implemented for Rust."
 repository = "https://github.com/jmjoy/fastcgi-client-rs"
 license = "MIT"
 readme = "README.md"
+keywords = ["fastcgi", "fastcgi-client", "php", "php-fpm"]
 
 [dependencies]
 byteorder = "1.3.1"
