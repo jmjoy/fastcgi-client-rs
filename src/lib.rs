@@ -56,3 +56,6 @@ pub use crate::client::{Client, ClientBuilder};
 pub use crate::error::{ClientError, ClientResult};
 pub use crate::meta::{Address, Output};
 pub use crate::params::Params;
+
+/// Version of this crate.
+pub const VERSION: &'static str = env!("LIB_BUILD_VERSION");
