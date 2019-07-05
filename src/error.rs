@@ -4,8 +4,48 @@ use std::fmt::{self, Display, Formatter};
 
 use std::io;
 
+use error_chain::error_chain;
+
+//error_chain! {
+//    foreign_links {
+//        Io(std::io::Error) #[doc = "Wapper of `std::io::Error`"];
+//    }
+//
+//    errors {
+//        #[doc = "Usually not happen."]
+//        RequestIdNotFound(id: u16) {
+//            description("Request id not found."),
+//            display("Request id `{}` not found.", id),
+//        }
+//
+//        #[doc = "Usually not happen."]
+//        ResponseNotFound(id: u16) {
+//            description("Response not found of request id."),
+//            display("Response not found of request id `{}`.", id),
+//        }
+//
+//        #[doc = "Maybe unimplemented request type received fom response."]
+//        UnknownRequestType(r#type: RequestType) {
+//            description("Unknown request type."),
+//            display("Response not found of request id `{}`.", r#type),
+//        }
+//
+////        #[doc = "Response not complete, first is protocol status and second is app status, see fastcgi protocol."]
+////        EndRequest(protocol_status: ProtocolStatus, app_status: u32) {
+////            description("End request error."),
+////            display(match protocol_status {
+////                ProtocolStatus::CantMpxConn => "This app can't multiplex [CantMpxConn]; AppStatus: {}",
+////                ProtocolStatus::Overloaded => "New request rejected; too busy [OVERLOADED]; AppStatus: {}",
+////                ProtocolStatus::UnknownRole => "Role value not known [UnknownRole]; AppStatus: {}",
+////                _ => unreachable!(),
+////            }, app_status),
+////        }
+//    }
+//}
+
+
 /// Result of ClientError.
-pub type ClientResult<T> = Result<T, ClientError>;
+pub type ClientResult<T> = std::result::Result<T, ClientError>;
 
 /// Client error, contain `std::io::Error` and some fastcgi specify error.
 #[derive(Debug)]
@@ -23,7 +63,7 @@ pub enum ClientError {
 }
 
 impl Display for ClientError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> std::result::Result<(), fmt::Error> {
         match self {
             ClientError::IoError(e) => Display::fmt(e, f),
             ClientError::RequestIdNotFound(id) => Display::fmt(&format!("Request id `{}` not found.", id), f),
