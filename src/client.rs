@@ -2,6 +2,7 @@ use crate::id::RequestIdGenerator;
 use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
+use crate::Stream;
 
 use log::info;
 use std::collections::HashMap;
@@ -9,130 +10,74 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs as _;
 
+use std::sync::Arc;
 use std::time::Duration;
 
-#[cfg(unix)]
-use std::os::unix::net::UnixStream;
-
-/// Builder for fastcgi client, with connect/read/write timeout setting,
-/// and keep-alive setting, etc.
-pub struct ClientBuilder<'a> {
-    address: Address<'a>,
-    connect_timeout: Option<Duration>,
-    read_timeout: Option<Duration>,
-    write_timeout: Option<Duration>,
-    keep_alive: bool,
-}
-
-impl<'a> ClientBuilder<'a> {
-    /// New Builder with fastcgi address info.
-    pub fn new(address: Address<'a>) -> Self {
-        Self {
-            address,
-            connect_timeout: Some(Duration::from_secs(30)),
-            read_timeout: Some(Duration::from_secs(30)),
-            write_timeout: Some(Duration::from_secs(30)),
-            keep_alive: false,
-        }
-    }
-
-    /// Set fastcgi server connection connect timeout, when you use `tcp` address, unless `unix-sock`.
-    pub fn set_connect_timeout(mut self, connect_timeout: Option<Duration>) -> Self {
-        self.connect_timeout = connect_timeout;
-        self
-    }
-
-    /// Set fastcgi server connection read timeout.
-    pub fn set_read_timeout(mut self, read_timeout: Option<Duration>) -> Self {
-        self.read_timeout = read_timeout;
-        self
-    }
-
-    /// Set fastcgi server connection write timeout.
-    pub fn set_write_timeout(mut self, write_timeout: Option<Duration>) -> Self {
-        self.write_timeout = write_timeout;
-        self
-    }
-
-    /// Set fastcgi server connection read & write timeout.
-    pub fn set_read_write_timeout(self, timeout: Option<Duration>) -> Self {
-        self.set_read_timeout(timeout).set_write_timeout(timeout)
-    }
-
-    /// Set fastcgi protocol flags, keepalive feature.
-    pub fn set_keep_alive(mut self, keep_alive: bool) -> Self {
-        self.keep_alive = keep_alive;
-        self
-    }
-
-    /// Build a client and really connect to fastcgi server.
-    pub fn build(self) -> io::Result<Client<'a>> {
-        let streams: (Box<Read>, Box<Write>) = match self.address {
-            Address::Tcp(host, port) => {
-                let stream = match self.connect_timeout {
-                    Some(connect_timeout) => {
-                        let addr = (host, port).to_socket_addrs()?.next().ok_or_else(|| {
-                            io::Error::new(
-                                ErrorKind::NotFound,
-                                "This should not happen, but if it happen, \
-                                 it means that your address is incorrect.",
-                            )
-                        })?;
-                        TcpStream::connect_timeout(&addr, connect_timeout)?
-                    }
-                    None => TcpStream::connect((host, port))?,
-                };
-                stream.set_read_timeout(self.read_timeout)?;
-                stream.set_write_timeout(self.write_timeout)?;
-                (Box::new(BufReader::new(stream.try_clone()?)), Box::new(BufWriter::new(stream)))
-            }
-            #[cfg(unix)]
-            Address::UnixSock(path) => {
-                if cfg!(unix) {
-                    let stream = UnixStream::connect(path)?;
-                    (Box::new(BufReader::new(stream.try_clone()?)), Box::new(BufWriter::new(stream)))
-                } else {
-                    panic!("Unix socket not support for your operate system.")
-                }
-            }
-        };
-
-        Ok(Client {
-            builder: self,
-            read_stream: streams.0,
-            write_stream: streams.1,
-            outputs: HashMap::new(),
-        })
-    }
-}
-
 /// Client for handling communication between fastcgi server.
-pub struct Client<'a> {
-    builder: ClientBuilder<'a>,
-    read_stream: Box<Read>,
-    write_stream: Box<Write>,
+pub struct Client<R, W>
+where
+    R: Read + Send + Sync,
+    W: Write + Send + Sync,
+{
+    keep_alive: bool,
+    read_stream: Box<R>,
+    write_stream: Box<W>,
     outputs: OutputMap,
 }
 
-impl<'a> Client<'a> {
+impl<R: Stream, W: Stream> Client<R, W> {
+//    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
+//    /// with buffed read/write for stream.
+//    pub fn new(stream: &impl Stream, keep_alive: bool) -> io::Result<Self> {
+//        Self::new_with_is_buffed(stream, keep_alive, true)
+//    }
+
+    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
+    /// - `is_buffed` whether to buffed read/write for stream.
+    pub fn new_with_is_buffed<S: Stream>(stream: &S, keep_alive: bool, is_buffed: bool) -> io::Result<Self> {
+        let outputs = HashMap::new();
+
+//        if is_buffed {
+//            Self {
+//                keep_alive,
+//                read_stream: BufReader::new(stream.try_clone()?),
+//                write_stream: BufWriter::new(stream.try_clone()?),
+//                outputs,
+//            }
+//        } else {
+        Ok(Self {
+            keep_alive,
+            read_stream: Box::new(stream.try_clone()?),
+            write_stream: Box::new(stream.try_clone()?),
+            outputs,
+        })
+//        }
+    }
+}
+
+impl<R, W> Client<R, W>
+where
+    R: Read + Send + Sync,
+    W: Write + Send + Sync,
+{
     /// Send request and receive response from fastcgi server.
     /// - `params` fastcgi params.
     /// - `body` always the http post or put body.
     ///
     /// return the output of fastcgi stdout and stderr.
-    pub fn do_request(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
+    pub fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
         Ok(self.outputs.get_mut(&id).ok_or_else(|| ClientError::RequestIdNotFound(id))?)
     }
 
-    fn handle_request(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
+    fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
         let write_stream = &mut self.write_stream;
 
         info!("[id = {}] Start handle request.", id);
 
-        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.builder.keep_alive)?;
+        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
         info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.write_to_stream(write_stream)?;
 
