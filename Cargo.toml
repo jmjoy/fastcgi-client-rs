@@ -8,6 +8,12 @@ repository = "https://github.com/jmjoy/fastcgi-client-rs"
 license = "MIT"
 readme = "README.md"
 keywords = ["fastcgi", "fastcgi-client", "php", "php-fpm"]
+exclude = [
+    "fastcgi-client-rs.png",
+    ".gitignore",
+    ".travis.yml",
+    "rustfmt.toml"
+]
 
 [dependencies]
 byteorder = "1.3.1"
