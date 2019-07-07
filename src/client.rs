@@ -2,7 +2,7 @@ use crate::id::RequestIdGenerator;
 use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
-use crate::Stream;
+use bufstream::BufStream;
 
 use log::info;
 use std::collections::HashMap;
@@ -14,52 +14,25 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Client for handling communication between fastcgi server.
-pub struct Client<R, W>
-where
-    R: Read + Send + Sync,
-    W: Write + Send + Sync,
-{
+pub struct Client<S: Read + Write + Send + Sync> {
     keep_alive: bool,
-    read_stream: Box<R>,
-    write_stream: Box<W>,
+    stream: Box<S>,
     outputs: OutputMap,
 }
 
-impl<R: Stream, W: Stream> Client<R, W> {
-//    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
-//    /// with buffed read/write for stream.
-//    pub fn new(stream: &impl Stream, keep_alive: bool) -> io::Result<Self> {
-//        Self::new_with_is_buffed(stream, keep_alive, true)
-//    }
-
+impl<S: Read + Write + Send + Sync> Client<BufStream<S>> {
     /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
-    /// - `is_buffed` whether to buffed read/write for stream.
-    pub fn new_with_is_buffed<S: Stream>(stream: &S, keep_alive: bool, is_buffed: bool) -> io::Result<Self> {
-        let outputs = HashMap::new();
-
-//        if is_buffed {
-//            Self {
-//                keep_alive,
-//                read_stream: BufReader::new(stream.try_clone()?),
-//                write_stream: BufWriter::new(stream.try_clone()?),
-//                outputs,
-//            }
-//        } else {
-        Ok(Self {
+    /// with buffed read/write for stream.
+    pub fn new(stream: S, keep_alive: bool) -> Self {
+        Self {
             keep_alive,
-            read_stream: Box::new(stream.try_clone()?),
-            write_stream: Box::new(stream.try_clone()?),
-            outputs,
-        })
-//        }
+            stream: Box::new(BufStream::new(stream)),
+            outputs: HashMap::new(),
+        }
     }
 }
 
-impl<R, W> Client<R, W>
-where
-    R: Read + Send + Sync,
-    W: Write + Send + Sync,
-{
+impl<S: Read + Write + Send + Sync> Client<S> {
     /// Send request and receive response from fastcgi server.
     /// - `params` fastcgi params.
     /// - `body` always the http post or put body.
@@ -73,7 +46,7 @@ where
     }
 
     fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
-        let write_stream = &mut self.write_stream;
+        let write_stream = &mut self.stream;
 
         info!("[id = {}] Start handle request.", id);
 
@@ -139,7 +112,7 @@ where
         let global_end_request_rec: Option<EndRequestRec>;
 
         loop {
-            let read_stream = &mut self.read_stream;
+            let read_stream = &mut self.stream;
             let header = Header::new_from_stream(read_stream)?;
             info!("[id = {}] Receive from stream: {:?}.", id, &header);
 

@@ -51,13 +51,11 @@ mod error;
 mod id;
 mod meta;
 mod params;
-mod stream;
 
 pub use crate::client::Client;
 pub use crate::error::{ClientError, ClientResult};
 pub use crate::meta::{Address, Output};
 pub use crate::params::Params;
-pub use crate::stream::*;
 
 /// Version of this crate.
 pub const VERSION: &'static str = env!("LIB_BUILD_VERSION");
