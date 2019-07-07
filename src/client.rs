@@ -1,17 +1,12 @@
 use crate::id::RequestIdGenerator;
-use crate::meta::{Address, BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
+use crate::meta::{BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
 use crate::params::Params;
 use crate::{ClientError, ClientResult};
 use bufstream::BufStream;
 
 use log::info;
 use std::collections::HashMap;
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
-use std::net::TcpStream;
-use std::net::ToSocketAddrs as _;
-
-use std::sync::Arc;
-use std::time::Duration;
+use std::io::{self, Read, Write};
 
 /// Client for handling communication between fastcgi server.
 pub struct Client<S: Read + Write + Send + Sync> {

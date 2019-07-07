@@ -4,8 +4,9 @@
 //!
 //! ### Example
 //! ```
-//! use fastcgi_client::{Address, ClientBuilder, Params};
+//! use fastcgi_client::{Client, Params};
 //! use std::{env, io};
+//! use std::net::TcpStream;
 //!
 //! let script_filename = env::current_dir()
 //!     .unwrap()
@@ -16,7 +17,8 @@
 //! let script_name = "/index.php";
 //!
 //! // Connect to php-fpm default listening address.
-//! let mut client = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000)).build().unwrap();
+//! let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
+//! let mut client = Client::new(stream, false);
 //!
 //! // Fastcgi params, please reference to nginx-php-fpm config.
 //! let params = Params::with_predefine()
@@ -38,7 +40,6 @@
 //!
 //! // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
 //! let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
-//! dbg!(&stdout);
 //!
 //! assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
 //! assert!(stdout.contains("hello"));

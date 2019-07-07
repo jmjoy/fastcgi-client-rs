@@ -1,6 +1,7 @@
-use fastcgi_client::{Address, ClientBuilder, Params};
+use fastcgi_client::{Client, Params};
 use std::env::current_dir;
 use std::io;
+use std::net::TcpStream;
 
 mod common;
 
@@ -8,8 +9,8 @@ mod common;
 fn test() {
     common::setup();
 
-    let mut client = ClientBuilder::new(Address::Tcp("127.0.0.1", 9000)).build().unwrap();
-    //    let mut client = ClientBuilder::new(Address::UnixSock("/run/php/php7.1-fpm.sock")).build().unwrap();
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
+    let mut client = Client::new(stream, false);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
