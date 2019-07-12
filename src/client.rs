@@ -1,7 +1,7 @@
 use crate::id::RequestIdGenerator;
 use crate::meta::{BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
 use crate::params::Params;
-use crate::{ClientError, ClientResult};
+use crate::{ErrorKind, Result as ClientResult};
 use bufstream::BufStream;
 
 use log::info;
@@ -37,7 +37,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
-        Ok(self.outputs.get_mut(&id).ok_or_else(|| ClientError::RequestIdNotFound(id))?)
+        Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
     }
 
     fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
@@ -112,7 +112,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             info!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
-                return Err(ClientError::ResponseNotFound(id));
+                return Err(ErrorKind::ResponseNotFound(id).into());
             }
 
             match header.r#type {
@@ -130,7 +130,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
                     global_end_request_rec = Some(end_request_rec);
                     break;
                 }
-                r#type => return Err(ClientError::UnknownRequestType(r#type)),
+                r#type => return Err(ErrorKind::UnknownRequestType(r#type).into()),
             }
         }
 
@@ -148,6 +148,6 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     }
 
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or_else(|| ClientError::RequestIdNotFound(id))
+        self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
     }
 }

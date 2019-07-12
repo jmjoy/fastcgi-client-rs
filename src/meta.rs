@@ -1,10 +1,10 @@
-use crate::error::{ClientError, ClientResult};
+use crate::error::{ErrorKind, Result as ClientResult};
 use crate::Params;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::cmp::min;
 use std::collections::HashMap;
 
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 
 use std::io::{self, Read, Write};
 use std::mem::size_of;
@@ -49,6 +49,12 @@ impl RequestType {
             10 => RequestType::GetValuesResult,
             _ => RequestType::UnknownType,
         }
+    }
+}
+
+impl Display for RequestType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Display::fmt(&(self.clone() as u8), f)
     }
 }
 
@@ -328,7 +334,7 @@ impl ProtocolStatus {
     pub(crate) fn convert_to_client_result(self, app_status: u32) -> ClientResult<()> {
         match self {
             ProtocolStatus::RequestComplete => Ok(()),
-            _ => Err(ClientError::EndRequest(self, app_status)),
+            _ => Err(ErrorKind::new_end_request_with_protocol_status(self, app_status).into()),
         }
     }
 }

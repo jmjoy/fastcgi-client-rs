@@ -54,7 +54,7 @@ mod meta;
 mod params;
 
 pub use crate::client::Client;
-pub use crate::error::{ClientError, ClientResult};
+pub use crate::error::*;
 pub use crate::meta::{Address, Output};
 pub use crate::params::Params;
 
