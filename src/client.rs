@@ -17,7 +17,7 @@ pub struct Client<S: Read + Write + Send + Sync> {
 
 impl<S: Read + Write + Send + Sync> Client<BufStream<S>> {
     /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
-    /// with buffed read/write for stream.
+    /// with buffered read/write for stream.
     pub fn new(stream: S, keep_alive: bool) -> Self {
         Self {
             keep_alive,
@@ -28,6 +28,16 @@ impl<S: Read + Write + Send + Sync> Client<BufStream<S>> {
 }
 
 impl<S: Read + Write + Send + Sync> Client<S> {
+    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
+    /// without buffered read/write for stream.
+    pub fn new_without_buffered(stream: S, keep_alive: bool) -> Self {
+        Self {
+            keep_alive,
+            stream: Box::new(stream),
+            outputs: HashMap::new(),
+        }
+    }
+
     /// Send request and receive response from fastcgi server.
     /// - `params` fastcgi params.
     /// - `body` always the http post or put body.
