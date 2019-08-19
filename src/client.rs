@@ -43,14 +43,14 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     /// - `body` always the http post or put body.
     ///
     /// return the output of fastcgi stdout and stderr.
-    pub fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut Read) -> ClientResult<&mut Output> {
+    pub fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
         Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
     }
 
-    fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut Read) -> ClientResult<()> {
+    fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
         info!("[id = {}] Start handle request.", id);

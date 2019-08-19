@@ -72,8 +72,8 @@ impl Header {
     pub(crate) fn write_to_stream_batches<F>(
         r#type: RequestType,
         request_id: u16,
-        writer: &mut Write,
-        content: &mut Read,
+        writer: &mut dyn Write,
+        content: &mut dyn Read,
         before_write: Option<F>,
     ) -> io::Result<()>
     where
@@ -112,7 +112,7 @@ impl Header {
         }
     }
 
-    fn write_to_stream(self, writer: &mut Write, content: &[u8]) -> io::Result<()> {
+    fn write_to_stream(self, writer: &mut dyn Write, content: &[u8]) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
         buf.push(self.r#type as u8);
@@ -128,7 +128,7 @@ impl Header {
         Ok(())
     }
 
-    pub(crate) fn new_from_stream(reader: &mut Read) -> io::Result<Self> {
+    pub(crate) fn new_from_stream(reader: &mut dyn Read) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf)?;
 
@@ -142,7 +142,7 @@ impl Header {
         })
     }
 
-    pub(crate) fn read_content_from_stream(&self, reader: &mut Read) -> io::Result<Vec<u8>> {
+    pub(crate) fn read_content_from_stream(&self, reader: &mut dyn Read) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf)?;
         let mut padding_buf = vec![0; self.padding_length as usize];
@@ -203,7 +203,7 @@ impl BeginRequestRec {
         })
     }
 
-    pub(crate) fn write_to_stream(self, writer: &mut Write) -> io::Result<()> {
+    pub(crate) fn write_to_stream(self, writer: &mut dyn Write) -> io::Result<()> {
         self.header.write_to_stream(writer, &self.content)
     }
 }
@@ -264,7 +264,7 @@ impl<'a> ParamPair<'a> {
         }
     }
 
-    fn write_to_stream(&self, writer: &mut Write) -> io::Result<()> {
+    fn write_to_stream(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(&self.name_length.content()?)?;
         writer.write_all(&self.value_length.content()?)?;
         writer.write_all(self.name_data.as_bytes())?;
@@ -353,7 +353,7 @@ pub(crate) struct EndRequestRec {
 }
 
 impl EndRequestRec {
-    pub(crate) fn from_header(header: &Header, reader: &mut Read) -> io::Result<Self> {
+    pub(crate) fn from_header(header: &Header, reader: &mut dyn Read) -> io::Result<Self> {
         let header = header.clone();
         let mut content = &*header.read_content_from_stream(reader)?;
         let app_status = content.read_u32::<BigEndian>()?;
