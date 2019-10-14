@@ -4,9 +4,11 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::cmp::min;
 use std::collections::HashMap;
 
+use tokio_io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use std::io;
+
 use std::fmt::{self, Debug, Display};
 
-use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 
@@ -14,9 +16,9 @@ pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
 pub(crate) const HEADER_LEN: usize = size_of::<Header>();
 
-pub(crate) trait ReadWrite: Read + Write {}
+pub(crate) trait AsyncReadWrite: AsyncRead + AsyncWrite {}
 
-impl<T> ReadWrite for T where T: Read + Write {}
+impl<T> AsyncReadWrite for T where T: AsyncRead + AsyncWrite {}
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
@@ -69,21 +71,23 @@ pub(crate) struct Header {
 }
 
 impl Header {
-    pub(crate) fn write_to_stream_batches<F>(
+    pub(crate) async fn write_to_stream_batches<F, R, W>(
         r#type: RequestType,
         request_id: u16,
-        writer: &mut dyn Write,
-        content: &mut dyn Read,
+        writer: &mut W,
+        content: &mut R,
         before_write: Option<F>,
     ) -> io::Result<()>
     where
         F: Fn(Header) -> Header,
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin
     {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
         let mut had_writen = false;
 
         loop {
-            let read = content.read(&mut buf)?;
+            let read = content.read(&mut buf).await?;
             if had_writen && (read == 0 || read < MAX_LENGTH) {
                 break;
             }
@@ -93,7 +97,7 @@ impl Header {
             if let Some(ref f) = before_write {
                 header = f(header);
             }
-            header.write_to_stream(writer, buf)?;
+            header.write_to_stream(writer, buf).await?;
 
             had_writen = true;
         }
@@ -112,7 +116,8 @@ impl Header {
         }
     }
 
-    fn write_to_stream(self, writer: &mut dyn Write, content: &[u8]) -> io::Result<()> {
+    async fn write_to_stream<T>(self, writer: &mut T, content: &[u8]) -> io::Result<()>
+    where T: AsyncWrite + Unpin {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
         buf.push(self.r#type as u8);
@@ -121,16 +126,16 @@ impl Header {
         buf.push(self.padding_length);
         buf.push(self.reserved);
 
-        writer.write_all(&buf)?;
-        writer.write_all(content)?;
-        writer.write_all(&vec![0; self.padding_length as usize])?;
-
+        writer.write_all(&buf).await?;
+        writer.write_all(content).await?;
+        writer.write_all(&vec![0; self.padding_length as usize]).await?;
         Ok(())
     }
 
-    pub(crate) fn new_from_stream(reader: &mut dyn Read) -> io::Result<Self> {
+    pub(crate) async fn new_from_stream<T>(reader: &mut T) -> io::Result<Self>
+    where T: AsyncRead + Unpin {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
-        reader.read_exact(&mut buf)?;
+        reader.read_exact(&mut buf).await?;
 
         Ok(Self {
             version: buf[0],
@@ -142,11 +147,12 @@ impl Header {
         })
     }
 
-    pub(crate) fn read_content_from_stream(&self, reader: &mut dyn Read) -> io::Result<Vec<u8>> {
+    pub(crate) async fn read_content_from_stream<T>(&self, reader: &mut T) -> io::Result<Vec<u8>>
+    where T: AsyncRead + Unpin {
         let mut buf = vec![0; self.content_length as usize];
-        reader.read_exact(&mut buf)?;
+        reader.read_exact(&mut buf).await?;
         let mut padding_buf = vec![0; self.padding_length as usize];
-        reader.read_exact(&mut padding_buf)?;
+        reader.read_exact(&mut padding_buf).await?;
         Ok(buf)
     }
 }
@@ -203,8 +209,9 @@ impl BeginRequestRec {
         })
     }
 
-    pub(crate) fn write_to_stream(self, writer: &mut dyn Write) -> io::Result<()> {
-        self.header.write_to_stream(writer, &self.content)
+    pub(crate) async fn write_to_stream<T>(self, writer: &mut T) -> io::Result<()>
+        where T: AsyncWrite + Unpin {
+        self.header.write_to_stream(writer, &self.content).await
     }
 }
 
@@ -264,11 +271,12 @@ impl<'a> ParamPair<'a> {
         }
     }
 
-    fn write_to_stream(&self, writer: &mut dyn Write) -> io::Result<()> {
-        writer.write_all(&self.name_length.content()?)?;
-        writer.write_all(&self.value_length.content()?)?;
-        writer.write_all(self.name_data.as_bytes())?;
-        writer.write_all(self.value_data.as_bytes())?;
+    async fn write_to_stream<T>(&self, mut writer: T) -> io::Result<()>
+        where T: AsyncWrite + Unpin {
+        writer.write_all(&self.name_length.content()?).await?;
+        writer.write_all(&self.value_length.content()?).await?;
+        writer.write_all(self.name_data.as_bytes()).await?;
+        writer.write_all(self.value_data.as_bytes()).await?;
         Ok(())
     }
 }
@@ -287,11 +295,11 @@ impl<'a> ParamPairs<'a> {
         Self(param_pairs)
     }
 
-    pub(crate) fn to_content(&self) -> io::Result<Vec<u8>> {
+    pub(crate) async fn to_content(&self) -> io::Result<Vec<u8>> {
         let mut buf: Vec<u8> = Vec::new();
 
         for param_pair in self.iter() {
-            param_pair.write_to_stream(&mut buf)?;
+            param_pair.write_to_stream(&mut buf).await?;
         }
 
         Ok(buf)
@@ -353,13 +361,14 @@ pub(crate) struct EndRequestRec {
 }
 
 impl EndRequestRec {
-    pub(crate) fn from_header(header: &Header, reader: &mut dyn Read) -> io::Result<Self> {
+    pub(crate) async fn from_header<T>(header: &Header, reader: &mut T) -> io::Result<Self>
+        where T: AsyncRead + Unpin {
         let header = header.clone();
-        let mut content = &*header.read_content_from_stream(reader)?;
+        let mut content = &*header.read_content_from_stream(reader).await?;
         let app_status = content.read_u32::<BigEndian>()?;
         let protocol_status = ProtocolStatus::from_u8(content.read_u8()?);
         let mut reserved: [u8; 3] = [0; 3];
-        content.read_exact(&mut reserved)?;
+        content.read_exact(&mut reserved).await?;
 
         Ok(Self {
             header,

@@ -1,23 +1,24 @@
-use fastcgi_client::{Client, Params};
+use fastcgi_client::{Client, Params, empty};
 use std::env::current_dir;
-use std::io;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::SocketAddr;
+use tokio::net::TcpStream;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 mod common;
 
-#[test]
-fn test() {
+#[tokio::test]
+async fn test() {
     common::setup();
 
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
-    test_client(&mut Client::new(stream, false));
+    let addr: SocketAddr = "127.0.0.1:9000".parse().unwrap();
+    let stream = TcpStream::connect(&addr).await.unwrap();
+    test_client(&mut Client::new(stream, false)).await;
 
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
-    test_client(&mut Client::new_without_buffered(stream, false));
+    let stream = TcpStream::connect(&addr).await.unwrap();
+    test_client(&mut Client::new_without_buffered(stream, false)).await;
 }
 
-fn test_client<S: Read + Write + Send + Sync>(client: &mut Client<S>) {
+async fn test_client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin>(client: &mut Client<S>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir().unwrap().join("tests").join("php").join("index.php");
@@ -37,7 +38,7 @@ fn test_client<S: Read + Write + Send + Sync>(client: &mut Client<S>) {
         .set_server_name("jmjoy-pc")
         .set_content_type("")
         .set_content_length("0");
-    let output = client.do_request(&params, &mut io::empty()).unwrap();
+    let output = client.do_request(&params, &mut empty()).await.unwrap();
 
     let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
