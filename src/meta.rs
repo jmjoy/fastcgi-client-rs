@@ -10,6 +10,12 @@ use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 
+#[cfg(feature = "async_std")]
+use async_std::io::{
+    prelude::{ReadExt as AsyncReadExt, *},
+    Read as AsyncRead, Write as AsyncWrite,
+};
+
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
 pub(crate) const HEADER_LEN: usize = size_of::<Header>();
@@ -100,6 +106,38 @@ impl Header {
         Ok(())
     }
 
+    #[cfg(feature = "async_std")]
+    pub(crate) async fn async_write_to_stream_batches<F>(
+        r#type: RequestType,
+        request_id: u16,
+        writer: &mut (dyn AsyncWrite + Unpin),
+        content: &mut (dyn AsyncRead + Unpin),
+        before_write: Option<F>,
+    ) -> io::Result<()>
+    where
+        F: Fn(Header) -> Header,
+    {
+        let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
+        let mut had_writen = false;
+
+        loop {
+            let read = content.read(&mut buf).await?;
+            if had_writen && (read == 0 || read < MAX_LENGTH) {
+                break;
+            }
+
+            let buf = &buf[..read];
+            let mut header = Self::new(r#type.clone(), request_id, buf);
+            if let Some(ref f) = before_write {
+                header = f(header);
+            }
+            header.write_to_async_stream(writer, buf).await?;
+
+            had_writen = true;
+        }
+        Ok(())
+    }
+
     fn new(r#type: RequestType, request_id: u16, content: &[u8]) -> Self {
         let content_length = min(content.len(), MAX_LENGTH) as u16;
         Self {
@@ -128,9 +166,41 @@ impl Header {
         Ok(())
     }
 
+    #[cfg(feature = "async_std")]
+    async fn write_to_async_stream(self, writer: &mut (dyn AsyncWrite + Unpin), content: &[u8]) -> io::Result<()> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.push(self.version);
+        buf.push(self.r#type as u8);
+        buf.write_u16::<BigEndian>(self.request_id)?;
+        buf.write_u16::<BigEndian>(self.content_length)?;
+        buf.push(self.padding_length);
+        buf.push(self.reserved);
+
+        writer.write_all(&buf).await?;
+        writer.write_all(content).await?;
+        writer.write_all(&vec![0; self.padding_length as usize]).await?;
+
+        Ok(())
+    }
+
     pub(crate) fn new_from_stream(reader: &mut dyn Read) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf)?;
+
+        Ok(Self {
+            version: buf[0],
+            r#type: RequestType::from_u8(buf[1]),
+            request_id: (&buf[2..4]).read_u16::<BigEndian>()?,
+            content_length: (&buf[4..6]).read_u16::<BigEndian>()?,
+            padding_length: buf[6],
+            reserved: buf[7],
+        })
+    }
+
+    #[cfg(feature = "async_std")]
+    pub(crate) async fn new_from_async_stream(reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
+        let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
+        reader.read_exact(&mut buf).await?;
 
         Ok(Self {
             version: buf[0],
@@ -147,6 +217,15 @@ impl Header {
         reader.read_exact(&mut buf)?;
         let mut padding_buf = vec![0; self.padding_length as usize];
         reader.read_exact(&mut padding_buf)?;
+        Ok(buf)
+    }
+
+    #[cfg(feature = "async_std")]
+    pub(crate) async fn read_content_from_async_stream(&self, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Vec<u8>> {
+        let mut buf = vec![0; self.content_length as usize];
+        reader.read_exact(&mut buf).await?;
+        let mut padding_buf = vec![0; self.padding_length as usize];
+        reader.read_exact(&mut padding_buf).await?;
         Ok(buf)
     }
 }
@@ -205,6 +284,11 @@ impl BeginRequestRec {
 
     pub(crate) fn write_to_stream(self, writer: &mut dyn Write) -> io::Result<()> {
         self.header.write_to_stream(writer, &self.content)
+    }
+
+    #[cfg(feature = "async_std")]
+    pub(crate) async fn async_write_to_stream(self, writer: &mut (dyn AsyncWrite + Unpin)) -> io::Result<()> {
+        self.header.write_to_async_stream(writer, &self.content).await
     }
 }
 
@@ -359,7 +443,7 @@ impl EndRequestRec {
         let app_status = content.read_u32::<BigEndian>()?;
         let protocol_status = ProtocolStatus::from_u8(content.read_u8()?);
         let mut reserved: [u8; 3] = [0; 3];
-        content.read_exact(&mut reserved)?;
+        Read::read_exact(&mut content, &mut reserved)?;
 
         Ok(Self {
             header,
@@ -370,19 +454,25 @@ impl EndRequestRec {
             },
         })
     }
-}
 
-/// Fastcgi server address.
-#[derive(Debug)]
-pub enum Address<'a> {
-    /// Tcp connection info.
-    /// - `0` host.
-    /// - `1` port.
-    Tcp(&'a str, u16),
-    #[cfg(unix)]
-    /// Unix socket info.
-    /// - `0` path of unix-sock file.
-    UnixSock(&'a str),
+    #[cfg(feature = "async_std")]
+    pub(crate) async fn from_async_header(header: &Header, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
+        let header = header.clone();
+        let mut content = &*header.read_content_from_async_stream(reader).await?;
+        let app_status = content.read_u32::<BigEndian>()?;
+        let protocol_status = ProtocolStatus::from_u8(content.read_u8()?);
+        let mut reserved: [u8; 3] = [0; 3];
+        AsyncReadExt::read_exact(&mut content, &mut reserved).await?;
+
+        Ok(Self {
+            header,
+            end_request: EndRequest {
+                app_status,
+                protocol_status,
+                reserved,
+            },
+        })
+    }
 }
 
 pub(crate) type OutputMap = HashMap<u16, Output>;

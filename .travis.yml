@@ -13,3 +13,9 @@ before_install:
 
 env:
   - RUST_LOG=fastcgi_client
+
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo build --verbose --no-default-features
+  - cargo test --verbose --no-default-features

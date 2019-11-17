@@ -55,8 +55,11 @@ mod params;
 
 pub use crate::client::Client;
 pub use crate::error::*;
-pub use crate::meta::{Address, Output};
+pub use crate::meta::Output;
 pub use crate::params::Params;
+
+#[cfg(feature = "async_std")]
+pub use crate::client::AsyncClient;
 
 /// Version of this crate.
 pub const VERSION: &'static str = env!("LIB_BUILD_VERSION");
