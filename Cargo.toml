@@ -7,7 +7,7 @@ description = "Fastcgi client implemented for Rust."
 repository = "https://github.com/jmjoy/fastcgi-client-rs"
 license = "MIT"
 readme = "README.md"
-keywords = ["fastcgi", "fastcgi-client", "php", "php-fpm"]
+keywords = ["fastcgi", "fastcgi-client", "php", "php-fpm", "async-std"]
 exclude = [
     "fastcgi-client-rs.png",
     ".gitignore",
