@@ -1,4 +1,4 @@
-#![cfg(feature = "async_std")]
+#![cfg(feature = "futures")]
 
 use async_std::net::TcpStream;
 use fastcgi_client::{AsyncClient, Params};
@@ -6,7 +6,7 @@ use std::env::current_dir;
 
 mod common;
 
-#[async_attributes::test]
+#[async_std::test]
 async fn test() {
     common::setup();
 

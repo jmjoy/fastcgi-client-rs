@@ -20,7 +20,7 @@
 //! ## Examples
 //!
 #![cfg_attr(
-    feature = "async_std",
+    feature = "futures",
     doc = r#"
  Async `async-std` client:
 
@@ -132,8 +132,9 @@ pub use crate::error::*;
 pub use crate::meta::Output;
 pub use crate::params::Params;
 
-#[cfg(feature = "async_std")]
+#[cfg(feature = "futures")]
 pub use crate::client::AsyncClient;
 
 /// Version of this crate.
-pub const VERSION: &'static str = env!("LIB_BUILD_VERSION");
+pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+

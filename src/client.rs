@@ -4,12 +4,12 @@ use crate::params::Params;
 use crate::{ErrorKind, Result as ClientResult};
 use bufstream::BufStream;
 
-use log::info;
+use log::debug;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 
-#[cfg(feature = "async_std")]
-use async_std::io::{prelude::*, Read as AsyncRead, Write as AsyncWrite};
+#[cfg(feature = "futures")]
+use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// Client for handling communication between fastcgi server.
 pub struct Client<S: Read + Write + Send + Sync> {
@@ -56,14 +56,14 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
-        info!("[id = {}] Start handle request.", id);
+        debug!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
-        info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
+        debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.write_to_stream(write_stream)?;
 
         let param_pairs = ParamPairs::new(params);
-        info!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
+        debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
 
         Header::write_to_stream_batches(
             RequestType::Params,
@@ -71,7 +71,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             write_stream,
             &mut &param_pairs.to_content()?[..],
             Some(|header| {
-                info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
             }),
         )?;
@@ -82,7 +82,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             write_stream,
             &mut io::empty(),
             Some(|header| {
-                info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
             }),
         )?;
@@ -93,7 +93,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             write_stream,
             body,
             Some(|header| {
-                info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
             }),
         )?;
@@ -104,7 +104,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             write_stream,
             &mut io::empty(),
             Some(|header| {
-                info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
             }),
         )?;
@@ -122,7 +122,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
         loop {
             let read_stream = &mut self.stream;
             let header = Header::new_from_stream(read_stream)?;
-            info!("[id = {}] Receive from stream: {:?}.", id, &header);
+            debug!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
                 return Err(ErrorKind::ResponseNotFound(id).into());
@@ -139,7 +139,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, read_stream)?;
-                    info!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
+                    debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
                     global_end_request_rec = Some(end_request_rec);
                     break;
                 }
@@ -165,7 +165,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     }
 }
 
-#[cfg(feature = "async_std")]
+#[cfg(feature = "futures")]
 /// Async client for handling communication between fastcgi server.
 pub struct AsyncClient<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
     keep_alive: bool,
@@ -173,7 +173,7 @@ pub struct AsyncClient<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
     outputs: OutputMap,
 }
 
-#[cfg(feature = "async_std")]
+#[cfg(feature = "futures")]
 impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     /// Construct a `AsyncClient` Object with stream (such as `async_std::net::TcpStream` or `async_std::os::unix::net::UnixStream`,
     /// with buffered read/write for stream.
@@ -200,14 +200,14 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     async fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut (dyn AsyncRead + Unpin)) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
-        info!("[id = {}] Start handle request.", id);
+        debug!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
-        info!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
+        debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
         begin_request_rec.async_write_to_stream(write_stream).await?;
 
         let param_pairs = ParamPairs::new(params);
-        info!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
+        debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
 
         Header::async_write_to_stream_batches(
             RequestType::Params,
@@ -215,7 +215,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
             write_stream,
             &mut &param_pairs.to_content()?[..],
             Some(|header| {
-                info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
             }),
         )
@@ -225,9 +225,9 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
             RequestType::Params,
             id,
             write_stream,
-            &mut async_std::io::empty(),
+            &mut futures::io::empty(),
             Some(|header| {
-                info!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
             }),
         )
@@ -239,7 +239,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
             write_stream,
             body,
             Some(|header| {
-                info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
             }),
         )
@@ -249,9 +249,9 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
             RequestType::Stdin,
             id,
             write_stream,
-            &mut async_std::io::empty(),
+            &mut futures::io::empty(),
             Some(|header| {
-                info!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
             }),
         )
@@ -270,7 +270,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         loop {
             let read_stream = &mut self.stream;
             let header = Header::new_from_async_stream(read_stream).await?;
-            info!("[id = {}] Receive from stream: {:?}.", id, &header);
+            debug!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
                 return Err(ErrorKind::ResponseNotFound(id).into());
@@ -287,7 +287,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_async_header(&header, read_stream).await?;
-                    info!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
+                    debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
                     global_end_request_rec = Some(end_request_rec);
                     break;
                 }

@@ -10,11 +10,8 @@ use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 
-#[cfg(feature = "async_std")]
-use async_std::io::{
-    prelude::{ReadExt as AsyncReadExt, *},
-    Read as AsyncRead, Write as AsyncWrite,
-};
+#[cfg(feature = "futures")]
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub(crate) const VERSION_1: u8 = 1;
 pub(crate) const MAX_LENGTH: usize = 0xffff;
@@ -106,7 +103,7 @@ impl Header {
         Ok(())
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     pub(crate) async fn async_write_to_stream_batches<F>(
         r#type: RequestType,
         request_id: u16,
@@ -166,7 +163,7 @@ impl Header {
         Ok(())
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     async fn write_to_async_stream(self, writer: &mut (dyn AsyncWrite + Unpin), content: &[u8]) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
@@ -197,7 +194,7 @@ impl Header {
         })
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     pub(crate) async fn new_from_async_stream(reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf).await?;
@@ -220,7 +217,7 @@ impl Header {
         Ok(buf)
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     pub(crate) async fn read_content_from_async_stream(&self, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf).await?;
@@ -286,7 +283,7 @@ impl BeginRequestRec {
         self.header.write_to_stream(writer, &self.content)
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     pub(crate) async fn async_write_to_stream(self, writer: &mut (dyn AsyncWrite + Unpin)) -> io::Result<()> {
         self.header.write_to_async_stream(writer, &self.content).await
     }
@@ -455,7 +452,7 @@ impl EndRequestRec {
         })
     }
 
-    #[cfg(feature = "async_std")]
+    #[cfg(feature = "futures")]
     pub(crate) async fn from_async_header(header: &Header, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
         let header = header.clone();
         let mut content = &*header.read_content_from_async_stream(reader).await?;

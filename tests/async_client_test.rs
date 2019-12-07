@@ -1,4 +1,4 @@
-#![cfg(feature = "async_std")]
+#![cfg(feature = "futures")]
 
 use async_std::io::{self, Read, Write};
 use async_std::net::TcpStream;
@@ -7,7 +7,7 @@ use std::env::current_dir;
 
 mod common;
 
-#[async_attributes::test]
+#[async_std::test]
 async fn test() {
     common::setup();
 
