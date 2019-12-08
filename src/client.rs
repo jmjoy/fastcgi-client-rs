@@ -166,6 +166,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
 }
 
 #[cfg(feature = "futures")]
+#[cfg_attr(docsrs, doc(cfg(feature = "futures")))]
 /// Async client for handling communication between fastcgi server.
 pub struct AsyncClient<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
     keep_alive: bool,

@@ -10,7 +10,7 @@ Fastcgi client implemented for Rust.
 
 ## Features
 
-Support both `async(async-std)` and `sync(std)` clients.
+Support both `async(futures, async-std)` and `sync(std)` clients.
 
 Be default, both `async` and `sync` client are included, if you don't want to include `async` client,
 You can specify `default-features = false` in `Cargo.toml`.
