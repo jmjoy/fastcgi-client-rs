@@ -21,102 +21,53 @@
 //!
 //! ## Examples
 //!
-#![cfg_attr(
-    feature = "futures",
-    doc = r#"
- Async `async-std` client:
-
- ```
- use fastcgi_client::{AsyncClient, Params};
- use std::env;
- use async_std::{io, task};
- use async_std::net::TcpStream;
-
- task::block_on(async {
-     let script_filename = env::current_dir()
-         .unwrap()
-         .join("tests")
-         .join("php")
-         .join("index.php");
-     let script_filename = script_filename.to_str().unwrap();
-     let script_name = "/index.php";
-
-     // Connect to php-fpm default listening address.
-     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-     let mut client = AsyncClient::new(stream, false);
-
-     // Fastcgi params, please reference to nginx-php-fpm config.
-     let params = Params::with_predefine()
-         .set_request_method("GET")
-         .set_script_name(script_name)
-         .set_script_filename(script_filename)
-         .set_request_uri(script_name)
-         .set_document_uri(script_name)
-         .set_remote_addr("127.0.0.1")
-         .set_remote_port("12345")
-         .set_server_addr("127.0.0.1")
-         .set_server_port("80")
-         .set_server_name("jmjoy-pc")
-         .set_content_type("")
-         .set_content_length("0");
-
-     // Fetch fastcgi server(php-fpm) response.
-     let output = client.do_request(&params, &mut io::empty()).await.unwrap();
-
-     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-     let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
-
-     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-     assert!(stdout.contains("hello"));
-     assert_eq!(output.get_stderr(), None);
- });
- ```
-"#
-)]
-//!
-//! Sync `std` client:
+//! Async `async-std` client:
 //!
 //! ```
 //! use fastcgi_client::{Client, Params};
-//! use std::{env, io};
-//! use std::net::TcpStream;
+//! use std::env;
+//! use tokio::{io, task};
+//! use tokio::net::TcpStream;
 //!
-//! let script_filename = env::current_dir()
-//!     .unwrap()
-//!     .join("tests")
-//!     .join("php")
-//!     .join("index.php");
-//! let script_filename = script_filename.to_str().unwrap();
-//! let script_name = "/index.php";
+//! #[tokio::main]
+//! async fn main() {
+//!     let script_filename = env::current_dir()
+//!         .unwrap()
+//!         .join("tests")
+//!         .join("php")
+//!         .join("index.php");
+//!     let script_filename = script_filename.to_str().unwrap();
+//!     let script_name = "/index.php";
 //!
-//! // Connect to php-fpm default listening address.
-//! let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
-//! let mut client = Client::new(stream, false);
+//!     // Connect to php-fpm default listening address.
+//!     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+//!     let mut client = Client::new(stream, false);
 //!
-//! // Fastcgi params, please reference to nginx-php-fpm config.
-//! let params = Params::with_predefine()
-//!     .set_request_method("GET")
-//!     .set_script_name(script_name)
-//!     .set_script_filename(script_filename)
-//!     .set_request_uri(script_name)
-//!     .set_document_uri(script_name)
-//!     .set_remote_addr("127.0.0.1")
-//!     .set_remote_port("12345")
-//!     .set_server_addr("127.0.0.1")
-//!     .set_server_port("80")
-//!     .set_server_name("jmjoy-pc")
-//!     .set_content_type("")
-//!     .set_content_length("0");
+//!     // Fastcgi params, please reference to nginx-php-fpm config.
+//!     let params = Params::with_predefine()
+//!         .set_request_method("GET")
+//!         .set_script_name(script_name)
+//!         .set_script_filename(script_filename)
+//!         .set_request_uri(script_name)
+//!         .set_document_uri(script_name)
+//!         .set_remote_addr("127.0.0.1")
+//!         .set_remote_port("12345")
+//!         .set_server_addr("127.0.0.1")
+//!         .set_server_port("80")
+//!         .set_server_name("jmjoy-pc")
+//!         .set_content_type("")
+//!         .set_content_length("0");
 //!
-//! // Fetch fastcgi server(php-fpm) response.
-//! let output = client.do_request(&params, &mut io::empty()).unwrap();
+//!     // Fetch fastcgi server(php-fpm) response.
+//!     let output = client.do_request(&params, &mut io::empty()).await.unwrap();
 //!
-//! // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-//! let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+//!     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+//!     let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
 //!
-//! assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-//! assert!(stdout.contains("hello"));
-//! assert_eq!(output.get_stderr(), None);
+//!     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+//!     assert!(stdout.contains("hello"));
+//!     assert_eq!(output.get_stderr(), None);
+//! }
 //! ```
 //!
 //! ## License
@@ -129,10 +80,5 @@ mod id;
 mod meta;
 mod params;
 
-pub use crate::{client::Client, error::*, meta::Output, params::Params};
-
-#[cfg(feature = "futures")]
-pub use crate::client::AsyncClient;
-
-/// Version of this crate.
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub use crate::{error::*, meta::Output, params::Params};
+pub use crate::client::Client;

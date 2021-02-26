@@ -1,7 +1,7 @@
 #![cfg(feature = "futures")]
 
 use async_std::net::TcpStream;
-use fastcgi_client::{AsyncClient, Params};
+use fastcgi_client::{Client, Params};
 use std::env::current_dir;
 
 mod common;
@@ -11,7 +11,7 @@ async fn test() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = AsyncClient::new(stream, false);
+    let mut client = Client::new(stream, false);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();

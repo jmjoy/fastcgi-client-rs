@@ -4,7 +4,7 @@ use async_std::{
     io::{self, Read, Write},
     net::TcpStream,
 };
-use fastcgi_client::{AsyncClient, Params};
+use fastcgi_client::{Client, Params};
 use std::env::current_dir;
 
 mod common;
@@ -14,10 +14,10 @@ async fn test() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    test_client(&mut AsyncClient::new(stream, false)).await;
+    test_client(&mut Client::new(stream, false)).await;
 }
 
-async fn test_client<S: Read + Write + Send + Sync + Unpin>(client: &mut AsyncClient<S>) {
+async fn test_client<S: Read + Write + Send + Sync + Unpin>(client: &mut Client<S>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()

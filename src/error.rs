@@ -4,9 +4,9 @@ pub type ClientResult<T> = Result<T, ClientError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
-    /// Wapper of `std::io::Error`
+    /// Wapper of `tokio::io::Error`
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] tokio::io::Error),
 
     /// Usually not happen.
     #[error("Response not found of request id `{id}`")]
