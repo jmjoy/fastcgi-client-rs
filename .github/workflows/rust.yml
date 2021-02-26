@@ -1,0 +1,26 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master, tokio-1 ]
+  pull_request:
+    branches: [ "**" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+  
+    strategy:
+      matrix:
+        os:
+        - ubuntu-latest
+        - macos-latest
+        - windows-latest
+  
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Run php-fpm
+      run: docker run -d --name php-fpm -p 9000:9000 -c /usr/local/etc/php/php.ini-development
