@@ -1,5 +1,7 @@
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 
 /// Fastcgi params, please reference to nginx-php-fpm fastcgi_params.
 #[derive(Default, Debug)]

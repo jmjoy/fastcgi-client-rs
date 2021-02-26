@@ -1,12 +1,18 @@
-use crate::id::RequestIdGenerator;
-use crate::meta::{BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
-use crate::params::Params;
-use crate::{ErrorKind, Result as ClientResult};
+use crate::{
+    id::RequestIdGenerator,
+    meta::{
+        BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role,
+    },
+    params::Params,
+    ErrorKind, Result as ClientResult,
+};
 use bufstream::BufStream;
 
 use log::debug;
-use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::{
+    collections::HashMap,
+    io::{self, Read, Write},
+};
 
 #[cfg(feature = "futures")]
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -46,14 +52,26 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     /// - `body` always the http post or put body.
     ///
     /// return the output of fastcgi stdout and stderr.
-    pub fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<&mut Output> {
+    pub fn do_request<'a>(
+        &mut self,
+        params: &Params<'a>,
+        body: &mut dyn Read,
+    ) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body)?;
         self.handle_response(id)?;
-        Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
+        Ok(self
+            .outputs
+            .get_mut(&id)
+            .ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
     }
 
-    fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<()> {
+    fn handle_request<'a>(
+        &mut self,
+        id: u16,
+        params: &Params<'a>,
+        body: &mut dyn Read,
+    ) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
         debug!("[id = {}] Start handle request.", id);
@@ -161,7 +179,9 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     }
 
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
+        self.outputs
+            .get_mut(&id)
+            .ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
     }
 }
 
@@ -191,21 +211,35 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     /// - `body` always the http post or put body.
     ///
     /// return the output of fastcgi stdout and stderr.
-    pub async fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut (dyn AsyncRead + Unpin)) -> ClientResult<&mut Output> {
+    pub async fn do_request<'a>(
+        &mut self,
+        params: &Params<'a>,
+        body: &mut (dyn AsyncRead + Unpin),
+    ) -> ClientResult<&mut Output> {
         let id = RequestIdGenerator.generate();
         self.handle_request(id, params, body).await?;
         self.handle_response(id).await?;
-        Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
+        Ok(self
+            .outputs
+            .get_mut(&id)
+            .ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
     }
 
-    async fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut (dyn AsyncRead + Unpin)) -> ClientResult<()> {
+    async fn handle_request<'a>(
+        &mut self,
+        id: u16,
+        params: &Params<'a>,
+        body: &mut (dyn AsyncRead + Unpin),
+    ) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
         debug!("[id = {}] Start handle request.", id);
 
         let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
         debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
-        begin_request_rec.async_write_to_stream(write_stream).await?;
+        begin_request_rec
+            .async_write_to_stream(write_stream)
+            .await?;
 
         let param_pairs = ParamPairs::new(params);
         debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
@@ -287,7 +321,8 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
                     self.get_output_mut(id)?.set_stderr(content)
                 }
                 RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_async_header(&header, read_stream).await?;
+                    let end_request_rec =
+                        EndRequestRec::from_async_header(&header, read_stream).await?;
                     debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
                     global_end_request_rec = Some(end_request_rec);
                     break;
@@ -310,6 +345,8 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     }
 
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
+        self.outputs
+            .get_mut(&id)
+            .ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
     }
 }

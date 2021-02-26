@@ -1,3 +1,5 @@
+#![warn(rust_2018_idioms, clippy::dbg_macro, clippy::print_stdout)]
+
 //! Fastcgi client implemented for Rust.
 //!
 //! ![fastcgi-client-rs](https://raw.githubusercontent.com/jmjoy/fastcgi-client-rs/master/fastcgi-client-rs.png)
@@ -127,14 +129,10 @@ mod id;
 mod meta;
 mod params;
 
-pub use crate::client::Client;
-pub use crate::error::*;
-pub use crate::meta::Output;
-pub use crate::params::Params;
+pub use crate::{client::Client, error::*, meta::Output, params::Params};
 
 #[cfg(feature = "futures")]
 pub use crate::client::AsyncClient;
 
 /// Version of this crate.
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-

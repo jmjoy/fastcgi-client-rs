@@ -47,7 +47,10 @@ error_chain! {
 }
 
 impl ErrorKind {
-    pub(crate) fn new_end_request_with_protocol_status(protocol_status: ProtocolStatus, app_status: u32) -> Self {
+    pub(crate) fn new_end_request_with_protocol_status(
+        protocol_status: ProtocolStatus,
+        app_status: u32,
+    ) -> Self {
         match protocol_status {
             ProtocolStatus::CantMpxConn => ErrorKind::EndRequestCantMpxConn(app_status),
             ProtocolStatus::Overloaded => ErrorKind::EndRequestOverloaded(app_status),

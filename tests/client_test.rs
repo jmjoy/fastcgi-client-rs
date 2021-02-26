@@ -1,8 +1,10 @@
 use fastcgi_client::{Client, Params};
-use std::env::current_dir;
-use std::io;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::{
+    env::current_dir,
+    io,
+    io::{Read, Write},
+    net::TcpStream,
+};
 
 mod common;
 
@@ -20,7 +22,11 @@ fn test() {
 fn test_client<S: Read + Write + Send + Sync>(client: &mut Client<S>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
-    let script_name = current_dir().unwrap().join("tests").join("php").join("index.php");
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("index.php");
     let script_name = script_name.to_str().unwrap();
 
     let params = Params::with_predefine()

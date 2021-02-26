@@ -1,14 +1,17 @@
-use crate::error::{ErrorKind, Result as ClientResult};
-use crate::Params;
+use crate::{
+    error::{ErrorKind, Result as ClientResult},
+    Params,
+};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::cmp::min;
-use std::collections::HashMap;
+use std::{cmp::min, collections::HashMap};
 
 use std::fmt::{self, Debug, Display};
 
-use std::io::{self, Read, Write};
-use std::mem::size_of;
-use std::ops::{Deref, DerefMut};
+use std::{
+    io::{self, Read, Write},
+    mem::size_of,
+    ops::{Deref, DerefMut},
+};
 
 #[cfg(feature = "futures")]
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -164,7 +167,11 @@ impl Header {
     }
 
     #[cfg(feature = "futures")]
-    async fn write_to_async_stream(self, writer: &mut (dyn AsyncWrite + Unpin), content: &[u8]) -> io::Result<()> {
+    async fn write_to_async_stream(
+        self,
+        writer: &mut (dyn AsyncWrite + Unpin),
+        content: &[u8],
+    ) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
         buf.push(self.r#type as u8);
@@ -175,7 +182,9 @@ impl Header {
 
         writer.write_all(&buf).await?;
         writer.write_all(content).await?;
-        writer.write_all(&vec![0; self.padding_length as usize]).await?;
+        writer
+            .write_all(&vec![0; self.padding_length as usize])
+            .await?;
 
         Ok(())
     }
@@ -195,7 +204,9 @@ impl Header {
     }
 
     #[cfg(feature = "futures")]
-    pub(crate) async fn new_from_async_stream(reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
+    pub(crate) async fn new_from_async_stream(
+        reader: &mut (dyn AsyncRead + Unpin),
+    ) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf).await?;
 
@@ -218,7 +229,10 @@ impl Header {
     }
 
     #[cfg(feature = "futures")]
-    pub(crate) async fn read_content_from_async_stream(&self, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Vec<u8>> {
+    pub(crate) async fn read_content_from_async_stream(
+        &self,
+        reader: &mut (dyn AsyncRead + Unpin),
+    ) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf).await?;
         let mut padding_buf = vec![0; self.padding_length as usize];
@@ -284,15 +298,23 @@ impl BeginRequestRec {
     }
 
     #[cfg(feature = "futures")]
-    pub(crate) async fn async_write_to_stream(self, writer: &mut (dyn AsyncWrite + Unpin)) -> io::Result<()> {
-        self.header.write_to_async_stream(writer, &self.content).await
+    pub(crate) async fn async_write_to_stream(
+        self,
+        writer: &mut (dyn AsyncWrite + Unpin),
+    ) -> io::Result<()> {
+        self.header
+            .write_to_async_stream(writer, &self.content)
+            .await
     }
 }
 
 impl Debug for BeginRequestRec {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         Debug::fmt(
-            &format!("BeginRequestRec {{header: {:?}, begin_request: {:?}}}", self.header, self.begin_request),
+            &format!(
+                "BeginRequestRec {{header: {:?}, begin_request: {:?}}}",
+                self.header, self.begin_request
+            ),
             f,
         )
     }
@@ -453,7 +475,10 @@ impl EndRequestRec {
     }
 
     #[cfg(feature = "futures")]
-    pub(crate) async fn from_async_header(header: &Header, reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
+    pub(crate) async fn from_async_header(
+        header: &Header,
+        reader: &mut (dyn AsyncRead + Unpin),
+    ) -> io::Result<Self> {
         let header = header.clone();
         let mut content = &*header.read_content_from_async_stream(reader).await?;
         let app_status = content.read_u32::<BigEndian>()?;

@@ -1,6 +1,5 @@
 use fastcgi_client::{Client, Params};
-use std::env::current_dir;
-use std::net::TcpStream;
+use std::{env::current_dir, net::TcpStream};
 
 mod common;
 
@@ -13,7 +12,11 @@ fn test() {
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
-    let script_name = current_dir().unwrap().join("tests").join("php").join("post.php");
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("post.php");
     let script_name = script_name.to_str().unwrap();
 
     let body = b"p1=3&p2=4";
