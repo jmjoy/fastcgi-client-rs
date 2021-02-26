@@ -80,5 +80,4 @@ mod id;
 mod meta;
 mod params;
 
-pub use crate::{error::*, meta::Output, params::Params};
-pub use crate::client::Client;
+pub use crate::{client::Client, error::*, meta::Output, params::Params};

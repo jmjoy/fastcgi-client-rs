@@ -39,9 +39,9 @@ impl ClientError {
         app_status: u32,
     ) -> Self {
         match protocol_status {
-            ProtocolStatus::CantMpxConn => ClientError::EndRequestCantMpxConn{app_status},
-            ProtocolStatus::Overloaded => ClientError::EndRequestOverloaded{app_status},
-            _ => ClientError::EndRequestUnknownRole{app_status},
+            ProtocolStatus::CantMpxConn => ClientError::EndRequestCantMpxConn { app_status },
+            ProtocolStatus::Overloaded => ClientError::EndRequestOverloaded { app_status },
+            _ => ClientError::EndRequestUnknownRole { app_status },
         }
     }
 }

@@ -2,9 +2,10 @@ use crate::{
     error::{ClientError, ClientResult},
     Params,
 };
-use std::{cmp::min, collections::HashMap};
-use std::fmt::{self, Debug, Display};
 use std::{
+    cmp::min,
+    collections::HashMap,
+    fmt::{self, Debug, Display},
     mem::size_of,
     ops::{Deref, DerefMut},
 };
@@ -130,9 +131,7 @@ impl Header {
         Ok(())
     }
 
-    pub(crate) async fn new_from_stream(
-        reader: &mut (dyn AsyncRead + Unpin),
-    ) -> io::Result<Self> {
+    pub(crate) async fn new_from_stream(reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf).await?;
 
@@ -214,9 +213,7 @@ impl BeginRequestRec {
         self,
         writer: &mut (dyn AsyncWrite + Unpin),
     ) -> io::Result<()> {
-        self.header
-            .write_to_stream(writer, &self.content)
-            .await
+        self.header.write_to_stream(writer, &self.content).await
     }
 }
 
@@ -281,7 +278,9 @@ impl<'a> ParamPair<'a> {
 
     async fn write_to_stream(&self, writer: &mut (dyn AsyncWrite + Unpin)) -> io::Result<()> {
         writer.write_all(&self.name_length.content().await?).await?;
-        writer.write_all(&self.value_length.content().await?).await?;
+        writer
+            .write_all(&self.value_length.content().await?)
+            .await?;
         writer.write_all(self.name_data.as_bytes()).await?;
         writer.write_all(self.value_data.as_bytes()).await?;
         Ok(())
