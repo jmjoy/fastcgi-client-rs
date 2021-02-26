@@ -4,7 +4,7 @@ use crate::{
         BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role,
     },
     params::Params,
-    ErrorKind, Result as ClientResult,
+    ClientError, ClientResult,
 };
 use bufstream::BufStream;
 
@@ -63,7 +63,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
         Ok(self
             .outputs
             .get_mut(&id)
-            .ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
+            .ok_or_else(|| ClientError::RequestIdNotFound { id })?)
     }
 
     fn handle_request<'a>(
@@ -143,7 +143,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
             debug!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
-                return Err(ErrorKind::ResponseNotFound(id).into());
+                return Err(ClientError::ResponseNotFound{id}.into());
             }
 
             match header.r#type {
@@ -161,7 +161,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
                     global_end_request_rec = Some(end_request_rec);
                     break;
                 }
-                r#type => return Err(ErrorKind::UnknownRequestType(r#type).into()),
+                r#type => return Err(ClientError::UnknownRequestType { request_type: r#type }.into()),
             }
         }
 
@@ -181,7 +181,7 @@ impl<S: Read + Write + Send + Sync> Client<S> {
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
         self.outputs
             .get_mut(&id)
-            .ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
+            .ok_or_else(|| ClientError::RequestIdNotFound{id}.into())
     }
 }
 
@@ -222,7 +222,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         Ok(self
             .outputs
             .get_mut(&id)
-            .ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
+            .ok_or_else(|| ClientError::RequestIdNotFound{id})?)
     }
 
     async fn handle_request<'a>(
@@ -308,7 +308,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
             debug!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
-                return Err(ErrorKind::ResponseNotFound(id).into());
+                return Err(ClientError::ResponseNotFound{id}.into());
             }
 
             match header.r#type {
@@ -327,7 +327,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
                     global_end_request_rec = Some(end_request_rec);
                     break;
                 }
-                r#type => return Err(ErrorKind::UnknownRequestType(r#type).into()),
+                r#type => return Err(ClientError::UnknownRequestType{request_type:r#type}.into()),
             }
         }
 
@@ -347,6 +347,6 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
         self.outputs
             .get_mut(&id)
-            .ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
+            .ok_or_else(|| ClientError::RequestIdNotFound{id}.into())
     }
 }

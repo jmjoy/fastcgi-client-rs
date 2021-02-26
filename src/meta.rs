@@ -1,5 +1,5 @@
 use crate::{
-    error::{ErrorKind, Result as ClientResult},
+    error::{ClientError, ClientResult},
     Params,
 };
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -59,7 +59,7 @@ impl RequestType {
 }
 
 impl Display for RequestType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         Display::fmt(&(self.clone() as u8), f)
     }
 }
@@ -309,7 +309,7 @@ impl BeginRequestRec {
 }
 
 impl Debug for BeginRequestRec {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         Debug::fmt(
             &format!(
                 "BeginRequestRec {{header: {:?}, begin_request: {:?}}}",
@@ -437,7 +437,7 @@ impl ProtocolStatus {
     pub(crate) fn convert_to_client_result(self, app_status: u32) -> ClientResult<()> {
         match self {
             ProtocolStatus::RequestComplete => Ok(()),
-            _ => Err(ErrorKind::new_end_request_with_protocol_status(self, app_status).into()),
+            _ => Err(ClientError::new_end_request_with_protocol_status(self, app_status).into()),
         }
     }
 }
@@ -531,7 +531,7 @@ impl Output {
 }
 
 impl Debug for Output {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         Debug::fmt(r#"Output { stdout: "...", stderr: "..." }"#, f)
     }
 }
