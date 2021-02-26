@@ -1,12 +1,10 @@
-#![cfg(feature = "futures")]
-
-use async_std::net::TcpStream;
 use fastcgi_client::{Client, Params};
 use std::env::current_dir;
+use tokio::net::TcpStream;
 
 mod common;
 
-#[async_std::test]
+#[tokio::test]
 async fn test() {
     common::setup();
 

@@ -1,15 +1,13 @@
-#![cfg(feature = "futures")]
-
-use async_std::{
-    io::{self, Read, Write},
-    net::TcpStream,
-};
 use fastcgi_client::{Client, Params};
 use std::env::current_dir;
+use tokio::{
+    io::{self, AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 
 mod common;
 
-#[async_std::test]
+#[tokio::test]
 async fn test() {
     common::setup();
 
@@ -17,7 +15,7 @@ async fn test() {
     test_client(&mut Client::new(stream, false)).await;
 }
 
-async fn test_client<S: Read + Write + Send + Sync + Unpin>(client: &mut Client<S>) {
+async fn test_client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin>(client: &mut Client<S>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()
