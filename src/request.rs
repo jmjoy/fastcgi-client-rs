@@ -1,6 +1,7 @@
 use crate::Params;
 use tokio::io::AsyncRead;
 
+/// fastcgi request.
 pub struct Request<'a, I: AsyncRead + Unpin> {
     pub(crate) params: Params<'a>,
     pub(crate) stdin: I,
@@ -11,13 +12,13 @@ impl<'a, I: AsyncRead + Unpin> Request<'a, I> {
         Self { params, stdin }
     }
 
-    pub fn from_http_request(http_request: http::Request<I>) -> Self {
-        // TODO fill logic
-        Self {
-            params: Default::default(),
-            stdin: http_request.into_body(),
-        }
-    }
+    // pub fn from_http_request(http_request: http::Request<I>) -> Self {
+    //     // TODO fill logic
+    //     Self {
+    //         params: Default::default(),
+    //         stdin: http_request.into_body(),
+    //     }
+    // }
 
     pub fn params(&self) -> &Params<'a> {
         &self.params
