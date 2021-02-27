@@ -4,21 +4,10 @@ use std::{
 };
 
 /// Fastcgi params, please reference to nginx-php-fpm fastcgi_params.
-#[derive(Default, Debug)]
+#[derive(Debug, Clone)]
 pub struct Params<'a>(HashMap<&'a str, &'a str>);
 
 impl<'a> Params<'a> {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    pub fn with_predefine() -> Self {
-        Self::new()
-            .set_gateway_interface("FastCGI/1.0")
-            .set_server_software("rust/fastcgi-client")
-            .set_server_protocol("HTTP/1.1")
-    }
-
     pub fn set_gateway_interface(mut self, gateway_interface: &'a str) -> Self {
         self.insert("GATEWAY_INTERFACE", gateway_interface);
         self
@@ -102,6 +91,15 @@ impl<'a> Params<'a> {
     pub fn set_content_length(mut self, content_length: &'a str) -> Self {
         self.insert("CONTENT_LENGTH", content_length);
         self
+    }
+}
+
+impl<'a> Default for Params<'a> {
+    fn default() -> Self {
+        Params(HashMap::new())
+            .set_gateway_interface("FastCGI/1.0")
+            .set_server_software("fastcgi-client-rs")
+            .set_server_protocol("HTTP/1.1")
     }
 }
 

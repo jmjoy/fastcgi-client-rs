@@ -1,20 +1,21 @@
 use crate::{
     id::RequestIdGenerator,
-    meta::{
-        BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role,
-    },
+    meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
-    ClientError, ClientResult,
+    request::Request,
+    response::ResponseMap,
+    ClientError, ClientResult, Response,
 };
 use log::debug;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// Async client for handling communication between fastcgi server.
 pub struct Client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
+    stream: S,
     keep_alive: bool,
-    stream: Box<S>,
-    outputs: OutputMap,
+    request_id_generator: RequestIdGenerator,
+    outputs: ResponseMap,
 }
 
 impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
@@ -22,8 +23,9 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
     /// with buffered read/write for stream.
     pub fn new(stream: S, keep_alive: bool) -> Self {
         Self {
+            stream,
             keep_alive,
-            stream: Box::new(stream),
+            request_id_generator: RequestIdGenerator::new(Duration::from_millis(1500)),
             outputs: HashMap::new(),
         }
     }
@@ -33,17 +35,28 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
     /// - `body` always the http post or put body.
     ///
     /// return the output of fastcgi stdout and stderr.
-    pub async fn do_request<'a>(
+    pub async fn execute<I: AsyncRead + Unpin>(
         &mut self,
-        params: &Params<'a>,
-        body: &mut (dyn AsyncRead + Unpin),
-    ) -> ClientResult<&mut Output> {
-        let id = RequestIdGenerator.generate();
-        self.handle_request(id, params, body).await?;
+        request: Request<'_, I>,
+    ) -> ClientResult<Response> {
+        let id = self.request_id_generator.alloc().await?;
+        let result = self.inner_execute(request, id).await;
+        self.request_id_generator.release(id).await;
+        result
+    }
+
+    async fn inner_execute<I: AsyncRead + Unpin>(
+        &mut self,
+        mut request: Request<'_, I>,
+        id: u16,
+    ) -> ClientResult<Response> {
+        self.handle_request(id, &request.params, &mut request.stdin)
+            .await?;
         self.handle_response(id).await?;
         Ok(self
             .outputs
-            .get_mut(&id)
+            .get(&id)
+            .map(|output| output.clone())
             .ok_or_else(|| ClientError::RequestIdNotFound { id })?)
     }
 
@@ -168,7 +181,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
         self.outputs.insert(id, Default::default());
     }
 
-    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
+    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Response> {
         self.outputs
             .get_mut(&id)
             .ok_or_else(|| ClientError::RequestIdNotFound { id }.into())

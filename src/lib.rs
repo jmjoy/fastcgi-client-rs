@@ -2,8 +2,6 @@
 
 //! Fastcgi client implemented for Rust.
 //!
-//! ![fastcgi-client-rs](https://raw.githubusercontent.com/jmjoy/fastcgi-client-rs/master/fastcgi-client-rs.png)
-//!
 //! ## Features
 //!
 //! Support both `async(futures, async-std)` and `sync(std)` clients.
@@ -31,7 +29,8 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let script_filename = env::current_dir()
+//!     use fastcgi_client::request::Request;
+//! let script_filename = env::current_dir()
 //!         .unwrap()
 //!         .join("tests")
 //!         .join("php")
@@ -44,7 +43,7 @@
 //!     let mut client = Client::new(stream, false);
 //!
 //!     // Fastcgi params, please reference to nginx-php-fpm config.
-//!     let params = Params::with_predefine()
+//!     let params = Params::default()
 //!         .set_request_method("GET")
 //!         .set_script_name(script_name)
 //!         .set_script_filename(script_filename)
@@ -59,7 +58,7 @@
 //!         .set_content_length("0");
 //!
 //!     // Fetch fastcgi server(php-fpm) response.
-//!     let output = client.do_request(&params, &mut io::empty()).await.unwrap();
+//!     let output = client.execute(Request::new(params, &mut io::empty())).await.unwrap();
 //!
 //!     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
 //!     let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
@@ -74,10 +73,12 @@
 //! [MIT](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).
 //!
 
-mod client;
+pub mod client;
 mod error;
 mod id;
 mod meta;
-mod params;
+pub mod params;
+pub mod request;
+pub mod response;
 
-pub use crate::{client::Client, error::*, meta::Output, params::Params};
+pub use crate::{client::Client, error::*, params::Params, request::Request, response::Response};

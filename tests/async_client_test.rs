@@ -1,4 +1,4 @@
-use fastcgi_client::{Client, Params};
+use fastcgi_client::{request::Request, Client, Params};
 use std::env::current_dir;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
@@ -25,7 +25,7 @@ async fn test_client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin>(client: &m
         .join("index.php");
     let script_name = script_name.to_str().unwrap();
 
-    let params = Params::with_predefine()
+    let params = Params::default()
         .set_request_method("GET")
         .set_document_root(document_root)
         .set_script_name("/index.php")
@@ -39,7 +39,11 @@ async fn test_client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin>(client: &m
         .set_server_name("jmjoy-pc")
         .set_content_type("")
         .set_content_length("0");
-    let output = client.do_request(&params, &mut io::empty()).await.unwrap();
+
+    let output = client
+        .execute(Request::new(params, &mut io::empty()))
+        .await
+        .unwrap();
 
     let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));

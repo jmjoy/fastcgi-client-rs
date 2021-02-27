@@ -31,6 +31,10 @@ pub enum ClientError {
     /// Response not complete, first is protocol status and second is app status, see fastcgi protocol.
     #[error("Role value not known [UnknownRole]; AppStatus: {app_status}")]
     EndRequestUnknownRole { app_status: u32 },
+
+    /// Try to get lock of RequestIdGenerator timeout.
+    #[error("Try to get lock of RequestIdGenerator timeout")]
+    RequestIdGenerateTimeout,
 }
 
 impl ClientError {

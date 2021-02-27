@@ -4,7 +4,6 @@ use crate::{
 };
 use std::{
     cmp::min,
-    collections::HashMap,
     fmt::{self, Debug, Display},
     mem::size_of,
     ops::{Deref, DerefMut},
@@ -386,54 +385,5 @@ impl EndRequestRec {
                 reserved,
             },
         })
-    }
-}
-
-pub(crate) type OutputMap = HashMap<u16, Output>;
-
-/// Output of fastcgi request, contains STDOUT and STDERR.
-#[derive(Default)]
-pub struct Output {
-    stdout: Option<Vec<u8>>,
-    stderr: Option<Vec<u8>>,
-}
-
-impl Output {
-    pub(crate) fn set_stdout(&mut self, stdout: Vec<u8>) {
-        match self.stdout {
-            Some(ref mut buf) => buf.extend(stdout.iter()),
-            None => self.stdout = Some(stdout),
-        }
-    }
-
-    pub(crate) fn set_stderr(&mut self, stderr: Vec<u8>) {
-        match self.stderr {
-            Some(ref mut buf) => buf.extend(stderr.iter()),
-            None => self.stderr = Some(stderr),
-        }
-    }
-
-    pub fn get_stdout(&self) -> Option<Vec<u8>> {
-        self.stdout.clone()
-    }
-
-    pub fn get_stderr(&self) -> Option<Vec<u8>> {
-        self.stderr.clone()
-    }
-}
-
-impl Debug for Output {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        Debug::fmt(r#"Output { stdout: "...", stderr: "..." }"#, f)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_header_len() {
-        assert_eq!(HEADER_LEN, 8);
     }
 }
