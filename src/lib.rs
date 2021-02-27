@@ -1,36 +1,28 @@
 #![warn(rust_2018_idioms, clippy::dbg_macro, clippy::print_stdout)]
 
-//! Fastcgi client implemented for Rust.
-//!
-//! ## Features
-//!
-//! Support both `async(futures, async-std)` and `sync(std)` clients.
-//!
-//! Be default, both `async` and `sync` client are included, if you don't want to include `async` client,
-//! You can specify `default-features = false` in `Cargo.toml`.
+//! Fastcgi client implemented for Rust, power by [tokio](https://crates.io/crates/tokio).
 //!
 //! ## Installation
 //!
-//! With [cargo add](https://github.com/killercup/cargo-edit) installed run:
+//! Add this to your Cargo.toml:
 //!
-//! ```bash
-//! $ cargo add fastcgi-client
+//! ```toml
+//! [dependencies]
+//! fastcgi-client = "0.6"
+//! tokio = { version = "1", features = ["full"] }
 //! ```
 //!
 //! ## Examples
 //!
-//! Async `async-std` client:
-//!
 //! ```
-//! use fastcgi_client::{Client, Params};
+//! use fastcgi_client::{Client, Params, Request};
 //! use std::env;
 //! use tokio::{io, task};
 //! use tokio::net::TcpStream;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     use fastcgi_client::request::Request;
-//! let script_filename = env::current_dir()
+//!     let script_filename = env::current_dir()
 //!         .unwrap()
 //!         .join("tests")
 //!         .join("php")

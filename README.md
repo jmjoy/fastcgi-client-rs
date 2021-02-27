@@ -1,37 +1,31 @@
 # fastcgi-client-rs
 
-[![Build Status](https://travis-ci.org/jmjoy/fastcgi-client-rs.svg?branch=master)](https://travis-ci.org/jmjoy/fastcgi-client-rs)
+[![Rust](https://github.com/jmjoy/fastcgi-client-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jmjoy/fastcgi-client-rs/actions/workflows/rust.yml)
 [![Crate](https://img.shields.io/crates/v/fastcgi-client.svg)](https://crates.io/crates/fastcgi-client)
 [![API](https://docs.rs/fastcgi-client/badge.svg)](https://docs.rs/fastcgi-client)
 
-Fastcgi client implemented for Rust.
-
-## Features
-
-Support both `async(futures, async-std)` and `sync(std)` clients.
-
-Be default, both `async` and `sync` client are included, if you don't want to include `async` client,
-You can specify `default-features = false` in `Cargo.toml`.
+Fastcgi client implemented for Rust, power by [tokio](https://crates.io/crates/tokio).
 
 ## Installation
 
-With [cargo add](https://github.com/killercup/cargo-edit) installed run:
+Add this to your Cargo.toml:
 
-```bash
-$ cargo add fastcgi-client
+```toml
+[dependencies]
+fastcgi-client = "0.6"
+tokio = { version = "1", features = ["full"] }
 ```
 
 ## Examples
 
-Async `async-std` client:
-
 ```
-use fastcgi_client::{AsyncClient, Params};
+use fastcgi_client::{Client, Params, Request};
 use std::env;
-use async_std::{io, task};
-use async_std::net::TcpStream;
+use tokio::{io, task};
+use tokio::net::TcpStream;
 
-task::block_on(async {
+#[tokio::main]
+async fn main() {
     let script_filename = env::current_dir()
         .unwrap()
         .join("tests")
@@ -42,10 +36,10 @@ task::block_on(async {
 
     // Connect to php-fpm default listening address.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = AsyncClient::new(stream, false);
+    let mut client = Client::new(stream, false);
 
     // Fastcgi params, please reference to nginx-php-fpm config.
-    let params = Params::with_predefine()
+    let params = Params::default()
         .set_request_method("GET")
         .set_script_name(script_name)
         .set_script_filename(script_filename)
@@ -60,7 +54,7 @@ task::block_on(async {
         .set_content_length("0");
 
     // Fetch fastcgi server(php-fpm) response.
-    let output = client.do_request(&params, &mut io::empty()).await.unwrap();
+    let output = client.execute(Request::new(params, &mut io::empty())).await.unwrap();
 
     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
     let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
@@ -68,54 +62,8 @@ task::block_on(async {
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("hello"));
     assert_eq!(output.get_stderr(), None);
-});
-```
-
-Sync `std` client:
-
-```
-use fastcgi_client::{Client, Params};
-use std::{env, io};
-use std::net::TcpStream;
-
-let script_filename = env::current_dir()
-    .unwrap()
-    .join("tests")
-    .join("php")
-    .join("index.php");
-let script_filename = script_filename.to_str().unwrap();
-let script_name = "/index.php";
-
-// Connect to php-fpm default listening address.
-let stream = TcpStream::connect(("127.0.0.1", 9000)).unwrap();
-let mut client = Client::new(stream, false);
-
-// Fastcgi params, please reference to nginx-php-fpm config.
-let params = Params::with_predefine()
-    .set_request_method("GET")
-    .set_script_name(script_name)
-    .set_script_filename(script_filename)
-    .set_request_uri(script_name)
-    .set_document_uri(script_name)
-    .set_remote_addr("127.0.0.1")
-    .set_remote_port("12345")
-    .set_server_addr("127.0.0.1")
-    .set_server_port("80")
-    .set_server_name("jmjoy-pc")
-    .set_content_type("")
-    .set_content_length("0");
-
-// Fetch fastcgi server(php-fpm) response.
-let output = client.do_request(&params, &mut io::empty()).unwrap();
-
-// "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
-
-assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-assert!(stdout.contains("hello"));
-assert_eq!(output.get_stderr(), None);
+}
 ```
 
 ## License
 [MIT](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).
-

@@ -19,8 +19,8 @@ pub struct Client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
-    /// Construct a `AsyncClient` Object with stream (such as `async_std::net::TcpStream` or `async_std::os::unix::net::UnixStream`,
-    /// with buffered read/write for stream.
+    /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
+    /// or `tokio::net::UnixStream`.
     pub fn new(stream: S, keep_alive: bool) -> Self {
         Self {
             stream,
@@ -31,10 +31,6 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
     }
 
     /// Send request and receive response from fastcgi server.
-    /// - `params` fastcgi params.
-    /// - `body` always the http post or put body.
-    ///
-    /// return the output of fastcgi stdout and stderr.
     pub async fn execute<I: AsyncRead + Unpin>(
         &mut self,
         request: Request<'_, I>,
@@ -133,9 +129,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
     async fn handle_response(&mut self, id: u16) -> ClientResult<()> {
         self.init_output(id);
 
-        let global_end_request_rec: Option<EndRequestRec>;
-
-        loop {
+        let global_end_request_rec = loop {
             let read_stream = &mut self.stream;
             let header = Header::new_from_stream(read_stream).await?;
             debug!("[id = {}] Receive from stream: {:?}.", id, &header);
@@ -156,8 +150,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, read_stream).await?;
                     debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
-                    global_end_request_rec = Some(end_request_rec);
-                    break;
+                    break Some(end_request_rec);
                 }
                 r#type => {
                     return Err(ClientError::UnknownRequestType {
@@ -166,7 +159,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
                     .into())
                 }
             }
-        }
+        };
 
         match global_end_request_rec {
             Some(end_request_rec) => end_request_rec
