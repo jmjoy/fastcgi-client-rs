@@ -7,7 +7,7 @@ description = "Fastcgi client implemented for Rust."
 repository = "https://github.com/jmjoy/fastcgi-client-rs"
 license = "MIT"
 readme = "README.md"
-keywords = ["fastcgi", "fcgi", "client", "tokio", "php", "php-fpm"]
+keywords = ["fastcgi", "fcgi", "client", "tokio", "php"]
 
 [dependencies]
 http = "0.2"
