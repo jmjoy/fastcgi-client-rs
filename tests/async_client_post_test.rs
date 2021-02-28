@@ -1,27 +1,29 @@
-#![cfg(feature = "futures")]
-
-use async_std::net::TcpStream;
-use fastcgi_client::{AsyncClient, Params};
+use fastcgi_client::{request::Request, Client, Params};
 use std::env::current_dir;
+use tokio::net::TcpStream;
 
 mod common;
 
-#[async_std::test]
+#[tokio::test]
 async fn test() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = AsyncClient::new(stream, false);
+    let mut client = Client::new(stream, true);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
-    let script_name = current_dir().unwrap().join("tests").join("php").join("post.php");
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("post.php");
     let script_name = script_name.to_str().unwrap();
 
     let body = b"p1=3&p2=4";
     let len = format!("{}", body.len());
 
-    let params = Params::with_predefine()
+    let params = Params::default()
         .set_request_method("POST")
         .set_document_root(document_root)
         .set_script_name("/post.php")
@@ -36,7 +38,15 @@ async fn test() {
         .set_server_name("jmjoy-pc")
         .set_content_type("application/x-www-form-urlencoded")
         .set_content_length(&len);
-    let output = client.do_request(&params, &mut &body[..]).await.unwrap();
+
+    let _ = client
+        .execute(Request::new(params.clone(), &mut &body[..]))
+        .await
+        .unwrap();
+    let output = client
+        .execute(Request::new(params, &mut &body[..]))
+        .await
+        .unwrap();
 
     let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));

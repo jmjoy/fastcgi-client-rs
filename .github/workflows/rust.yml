@@ -8,19 +8,27 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_LOG: fastcgi_client
+  RUSTFLAGS: "-D warnings"
 
 jobs:
-  build:
-  
-    strategy:
-      matrix:
-        os:
-        - ubuntu-latest
-        - macos-latest
-        - windows-latest
-  
-    runs-on: ${{ matrix.os }}
-
+  ci:
+    runs-on: ubuntu-latest
     steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Update rust
+      run: rustup update
+    - name: Setup nightly
+      run: rustup toolchain install nightly --component rustfmt --allow-downgrade
     - name: Run php-fpm
-      run: docker run -d --name php-fpm -p 9000:9000 -c /usr/local/etc/php/php.ini-development
+      run: docker run -d --name php-fpm -v $PWD:$PWD -p 9000:9000 php:7.1.30-fpm -c /usr/local/etc/php/php.ini-development
+    - name: Fmt
+      run: cargo +nightly fmt --all -- --check
+    - name: Build
+      run: cargo build --verbose
+    - name: Test
+      run: cargo test --verbose
+    - name: Doc
+      run: cargo doc --verbose

@@ -1,220 +1,83 @@
-use crate::id::RequestIdGenerator;
-use crate::meta::{BeginRequestRec, EndRequestRec, Header, Output, OutputMap, ParamPairs, RequestType, Role};
-use crate::params::Params;
-use crate::{ErrorKind, Result as ClientResult};
-use bufstream::BufStream;
-
+use crate::{
+    id::RequestIdGenerator,
+    meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
+    params::Params,
+    request::Request,
+    response::ResponseMap,
+    ClientError, ClientResult, Response,
+};
 use log::debug;
-use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::{collections::HashMap, time::Duration};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-#[cfg(feature = "futures")]
-use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-
-/// Client for handling communication between fastcgi server.
-pub struct Client<S: Read + Write + Send + Sync> {
-    keep_alive: bool,
-    stream: Box<S>,
-    outputs: OutputMap,
-}
-
-impl<S: Read + Write + Send + Sync> Client<BufStream<S>> {
-    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
-    /// with buffered read/write for stream.
-    pub fn new(stream: S, keep_alive: bool) -> Self {
-        Self {
-            keep_alive,
-            stream: Box::new(BufStream::new(stream)),
-            outputs: HashMap::new(),
-        }
-    }
-}
-
-impl<S: Read + Write + Send + Sync> Client<S> {
-    /// Construct a `Client` Object with stream (such as `std::net::TcpStream` or `std::os::unix::net::UnixStream`,
-    /// without buffered read/write for stream.
-    pub fn new_without_buffered(stream: S, keep_alive: bool) -> Self {
-        Self {
-            keep_alive,
-            stream: Box::new(stream),
-            outputs: HashMap::new(),
-        }
-    }
-
-    /// Send request and receive response from fastcgi server.
-    /// - `params` fastcgi params.
-    /// - `body` always the http post or put body.
-    ///
-    /// return the output of fastcgi stdout and stderr.
-    pub fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<&mut Output> {
-        let id = RequestIdGenerator.generate();
-        self.handle_request(id, params, body)?;
-        self.handle_response(id)?;
-        Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
-    }
-
-    fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut dyn Read) -> ClientResult<()> {
-        let write_stream = &mut self.stream;
-
-        debug!("[id = {}] Start handle request.", id);
-
-        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
-        debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
-        begin_request_rec.write_to_stream(write_stream)?;
-
-        let param_pairs = ParamPairs::new(params);
-        debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
-
-        Header::write_to_stream_batches(
-            RequestType::Params,
-            id,
-            write_stream,
-            &mut &param_pairs.to_content()?[..],
-            Some(|header| {
-                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
-                header
-            }),
-        )?;
-
-        Header::write_to_stream_batches(
-            RequestType::Params,
-            id,
-            write_stream,
-            &mut io::empty(),
-            Some(|header| {
-                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
-                header
-            }),
-        )?;
-
-        Header::write_to_stream_batches(
-            RequestType::Stdin,
-            id,
-            write_stream,
-            body,
-            Some(|header| {
-                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
-                header
-            }),
-        )?;
-
-        Header::write_to_stream_batches(
-            RequestType::Stdin,
-            id,
-            write_stream,
-            &mut io::empty(),
-            Some(|header| {
-                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
-                header
-            }),
-        )?;
-
-        write_stream.flush()?;
-
-        Ok(())
-    }
-
-    fn handle_response(&mut self, id: u16) -> ClientResult<()> {
-        self.init_output(id);
-
-        let global_end_request_rec: Option<EndRequestRec>;
-
-        loop {
-            let read_stream = &mut self.stream;
-            let header = Header::new_from_stream(read_stream)?;
-            debug!("[id = {}] Receive from stream: {:?}.", id, &header);
-
-            if header.request_id != id {
-                return Err(ErrorKind::ResponseNotFound(id).into());
-            }
-
-            match header.r#type {
-                RequestType::Stdout => {
-                    let content = header.read_content_from_stream(read_stream)?;
-                    self.get_output_mut(id)?.set_stdout(content)
-                }
-                RequestType::Stderr => {
-                    let content = header.read_content_from_stream(read_stream)?;
-                    self.get_output_mut(id)?.set_stderr(content)
-                }
-                RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_header(&header, read_stream)?;
-                    debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
-                    global_end_request_rec = Some(end_request_rec);
-                    break;
-                }
-                r#type => return Err(ErrorKind::UnknownRequestType(r#type).into()),
-            }
-        }
-
-        match global_end_request_rec {
-            Some(end_request_rec) => end_request_rec
-                .end_request
-                .protocol_status
-                .convert_to_client_result(end_request_rec.end_request.app_status),
-            None => unreachable!(),
-        }
-    }
-
-    fn init_output(&mut self, id: u16) {
-        self.outputs.insert(id, Default::default());
-    }
-
-    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
-    }
-}
-
-#[cfg(feature = "futures")]
-#[cfg_attr(docsrs, doc(cfg(feature = "futures")))]
 /// Async client for handling communication between fastcgi server.
-pub struct AsyncClient<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
+pub struct Client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
+    stream: S,
     keep_alive: bool,
-    stream: Box<S>,
-    outputs: OutputMap,
+    request_id_generator: RequestIdGenerator,
+    outputs: ResponseMap,
 }
 
-#[cfg(feature = "futures")]
-impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
-    /// Construct a `AsyncClient` Object with stream (such as `async_std::net::TcpStream` or `async_std::os::unix::net::UnixStream`,
-    /// with buffered read/write for stream.
+impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
+    /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
+    /// or `tokio::net::UnixStream`.
     pub fn new(stream: S, keep_alive: bool) -> Self {
         Self {
+            stream,
             keep_alive,
-            stream: Box::new(stream),
+            request_id_generator: RequestIdGenerator::new(Duration::from_millis(1500)),
             outputs: HashMap::new(),
         }
     }
 
     /// Send request and receive response from fastcgi server.
-    /// - `params` fastcgi params.
-    /// - `body` always the http post or put body.
-    ///
-    /// return the output of fastcgi stdout and stderr.
-    pub async fn do_request<'a>(&mut self, params: &Params<'a>, body: &mut (dyn AsyncRead + Unpin)) -> ClientResult<&mut Output> {
-        let id = RequestIdGenerator.generate();
-        self.handle_request(id, params, body).await?;
-        self.handle_response(id).await?;
-        Ok(self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id))?)
+    pub async fn execute<I: AsyncRead + Unpin>(
+        &mut self,
+        request: Request<'_, I>,
+    ) -> ClientResult<Response> {
+        let id = self.request_id_generator.alloc().await?;
+        let result = self.inner_execute(request, id).await;
+        self.request_id_generator.release(id).await;
+        result
     }
 
-    async fn handle_request<'a>(&mut self, id: u16, params: &Params<'a>, body: &mut (dyn AsyncRead + Unpin)) -> ClientResult<()> {
+    async fn inner_execute<I: AsyncRead + Unpin>(
+        &mut self,
+        mut request: Request<'_, I>,
+        id: u16,
+    ) -> ClientResult<Response> {
+        self.handle_request(id, &request.params, &mut request.stdin)
+            .await?;
+        self.handle_response(id).await?;
+        Ok(self
+            .outputs
+            .get(&id)
+            .map(|output| output.clone())
+            .ok_or_else(|| ClientError::RequestIdNotFound { id })?)
+    }
+
+    async fn handle_request<'a>(
+        &mut self,
+        id: u16,
+        params: &Params<'a>,
+        body: &mut (dyn AsyncRead + Unpin),
+    ) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
         debug!("[id = {}] Start handle request.", id);
 
-        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive)?;
+        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive).await?;
         debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
-        begin_request_rec.async_write_to_stream(write_stream).await?;
+        begin_request_rec.write_to_stream(write_stream).await?;
 
         let param_pairs = ParamPairs::new(params);
         debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
 
-        Header::async_write_to_stream_batches(
+        Header::write_to_stream_batches(
             RequestType::Params,
             id,
             write_stream,
-            &mut &param_pairs.to_content()?[..],
+            &mut &param_pairs.to_content().await?[..],
             Some(|header| {
                 debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
@@ -222,11 +85,11 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         )
         .await?;
 
-        Header::async_write_to_stream_batches(
+        Header::write_to_stream_batches(
             RequestType::Params,
             id,
             write_stream,
-            &mut futures::io::empty(),
+            &mut tokio::io::empty(),
             Some(|header| {
                 debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
                 header
@@ -234,7 +97,7 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         )
         .await?;
 
-        Header::async_write_to_stream_batches(
+        Header::write_to_stream_batches(
             RequestType::Stdin,
             id,
             write_stream,
@@ -246,11 +109,11 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         )
         .await?;
 
-        Header::async_write_to_stream_batches(
+        Header::write_to_stream_batches(
             RequestType::Stdin,
             id,
             write_stream,
-            &mut futures::io::empty(),
+            &mut tokio::io::empty(),
             Some(|header| {
                 debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
                 header
@@ -266,35 +129,37 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
     async fn handle_response(&mut self, id: u16) -> ClientResult<()> {
         self.init_output(id);
 
-        let global_end_request_rec: Option<EndRequestRec>;
-
-        loop {
+        let global_end_request_rec = loop {
             let read_stream = &mut self.stream;
-            let header = Header::new_from_async_stream(read_stream).await?;
+            let header = Header::new_from_stream(read_stream).await?;
             debug!("[id = {}] Receive from stream: {:?}.", id, &header);
 
             if header.request_id != id {
-                return Err(ErrorKind::ResponseNotFound(id).into());
+                return Err(ClientError::ResponseNotFound { id }.into());
             }
 
             match header.r#type {
                 RequestType::Stdout => {
-                    let content = header.read_content_from_async_stream(read_stream).await?;
+                    let content = header.read_content_from_stream(read_stream).await?;
                     self.get_output_mut(id)?.set_stdout(content)
                 }
                 RequestType::Stderr => {
-                    let content = header.read_content_from_async_stream(read_stream).await?;
+                    let content = header.read_content_from_stream(read_stream).await?;
                     self.get_output_mut(id)?.set_stderr(content)
                 }
                 RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_async_header(&header, read_stream).await?;
+                    let end_request_rec = EndRequestRec::from_header(&header, read_stream).await?;
                     debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
-                    global_end_request_rec = Some(end_request_rec);
-                    break;
+                    break Some(end_request_rec);
                 }
-                r#type => return Err(ErrorKind::UnknownRequestType(r#type).into()),
+                r#type => {
+                    return Err(ClientError::UnknownRequestType {
+                        request_type: r#type,
+                    }
+                    .into())
+                }
             }
-        }
+        };
 
         match global_end_request_rec {
             Some(end_request_rec) => end_request_rec
@@ -309,7 +174,9 @@ impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> AsyncClient<S> {
         self.outputs.insert(id, Default::default());
     }
 
-    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Output> {
-        self.outputs.get_mut(&id).ok_or_else(|| ErrorKind::RequestIdNotFound(id).into())
+    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Response> {
+        self.outputs
+            .get_mut(&id)
+            .ok_or_else(|| ClientError::RequestIdNotFound { id }.into())
     }
 }
