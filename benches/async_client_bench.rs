@@ -4,11 +4,11 @@ extern crate test;
 
 use fastcgi_client::{request::Request, Client, Params};
 use std::env::current_dir;
+use test::Bencher;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use test::Bencher;
 
 mod common;
 

@@ -1,8 +1,6 @@
 use fastcgi_client::{request::Request, Client, Params};
-use std::env::current_dir;
-use tokio::net::TcpStream;
-use tokio::time::timeout;
-use std::time::Duration;
+use std::{env::current_dir, time::Duration};
+use tokio::{net::TcpStream, time::timeout};
 
 mod common;
 
@@ -95,11 +93,13 @@ async fn post_big_body() {
         .set_content_type("text/plain")
         .set_content_length(&len);
 
-    let output = timeout(Duration::from_secs(3), client
-        .execute(Request::new(params.clone(), &mut &body[..])))
-        .await
-        .unwrap()
-        .unwrap();
+    let output = timeout(
+        Duration::from_secs(3),
+        client.execute(Request::new(params.clone(), &mut &body[..])),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
