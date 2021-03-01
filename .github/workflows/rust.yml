@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ master, tokio-1 ]
+    branches: [ master, develop ]
   pull_request:
     branches: [ "**" ]
 
