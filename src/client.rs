@@ -11,14 +11,14 @@ use std::{collections::HashMap, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// Async client for handling communication between fastcgi server.
-pub struct Client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
+pub struct Client<S: AsyncRead + AsyncWrite + Unpin> {
     stream: S,
     keep_alive: bool,
     request_id_generator: RequestIdGenerator,
     outputs: ResponseMap,
 }
 
-impl<S: AsyncRead + AsyncWrite + Send + Sync + Unpin> Client<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
     /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
     /// or `tokio::net::UnixStream`.
     pub fn new(stream: S, keep_alive: bool) -> Self {
