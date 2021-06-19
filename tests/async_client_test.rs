@@ -15,7 +15,7 @@ async fn test() {
     test_client(&mut Client::new(stream, false)).await;
 }
 
-async fn test_client<S: AsyncRead + AsyncWrite + Send + Sync + Unpin>(client: &mut Client<S>) {
+async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()
