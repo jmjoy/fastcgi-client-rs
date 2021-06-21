@@ -65,15 +65,17 @@ pub(crate) struct Header {
 }
 
 impl Header {
-    pub(crate) async fn write_to_stream_batches<F>(
+    pub(crate) async fn write_to_stream_batches<F, R, W>(
         r#type: RequestType,
         request_id: u16,
-        writer: &mut (dyn AsyncWrite + Unpin),
-        content: &mut (dyn AsyncRead + Unpin),
+        writer: &mut W,
+        content: &mut R,
         before_write: Option<F>,
     ) -> io::Result<()>
     where
         F: Fn(Header) -> Header,
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin
     {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
         let mut had_writen = false;
@@ -108,9 +110,9 @@ impl Header {
         }
     }
 
-    async fn write_to_stream(
+    async fn write_to_stream<W: AsyncWrite + Unpin>(
         self,
-        writer: &mut (dyn AsyncWrite + Unpin),
+        writer: &mut W,
         content: &[u8],
     ) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
@@ -130,7 +132,7 @@ impl Header {
         Ok(())
     }
 
-    pub(crate) async fn new_from_stream(reader: &mut (dyn AsyncRead + Unpin)) -> io::Result<Self> {
+    pub(crate) async fn new_from_stream<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Self> {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf).await?;
 
@@ -144,9 +146,9 @@ impl Header {
         })
     }
 
-    pub(crate) async fn read_content_from_stream(
+    pub(crate) async fn read_content_from_stream<R: AsyncRead + Unpin>(
         &self,
-        reader: &mut (dyn AsyncRead + Unpin),
+        reader: &mut R,
     ) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf).await?;
@@ -208,9 +210,9 @@ impl BeginRequestRec {
         })
     }
 
-    pub(crate) async fn write_to_stream(
+    pub(crate) async fn write_to_stream<W: AsyncWrite + Unpin>(
         self,
-        writer: &mut (dyn AsyncWrite + Unpin),
+        writer: &mut W,
     ) -> io::Result<()> {
         self.header.write_to_stream(writer, &self.content).await
     }
@@ -275,7 +277,7 @@ impl<'a> ParamPair<'a> {
         }
     }
 
-    async fn write_to_stream(&self, writer: &mut (dyn AsyncWrite + Unpin)) -> io::Result<()> {
+    async fn write_to_stream<W: AsyncWrite + Unpin>(&self, writer: &mut W) -> io::Result<()> {
         writer.write_all(&self.name_length.content().await?).await?;
         writer
             .write_all(&self.value_length.content().await?)
@@ -366,9 +368,9 @@ pub(crate) struct EndRequestRec {
 }
 
 impl EndRequestRec {
-    pub(crate) async fn from_header(
+    pub(crate) async fn from_header<R: AsyncRead + Unpin>(
         header: &Header,
-        reader: &mut (dyn AsyncRead + Unpin),
+        reader: &mut R,
     ) -> io::Result<Self> {
         let header = header.clone();
         let mut content = &*header.read_content_from_stream(reader).await?;

@@ -56,11 +56,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
             .ok_or_else(|| ClientError::RequestIdNotFound { id })?)
     }
 
-    async fn handle_request<'a>(
+    async fn handle_request<'a, I: AsyncRead + Unpin>(
         &mut self,
         id: u16,
         params: &Params<'a>,
-        body: &mut (dyn AsyncRead + Unpin),
+        body: &mut I,
     ) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 

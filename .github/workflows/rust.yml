@@ -27,8 +27,8 @@ jobs:
     - name: Fmt
       run: cargo +nightly fmt --all -- --check
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release --verbose
     - name: Test
-      run: cargo test --verbose
+      run: cargo test --release --verbose
     - name: Doc
       run: cargo doc --verbose
