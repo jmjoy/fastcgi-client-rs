@@ -12,7 +12,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-fastcgi-client = "0.6"
+fastcgi-client = "0.7"
 tokio = { version = "1", features = ["full"] }
 ```
 
