@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, fmt::Debug};
+use std::{collections::HashMap, fmt, fmt::Debug, str};
 
 pub(crate) type ResponseMap = HashMap<u16, Response>;
 
@@ -35,6 +35,9 @@ impl Response {
 
 impl Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        Debug::fmt(r#"Output { stdout: "...", stderr: "..." }"#, f)
+        f.debug_struct("Response")
+            .field("stdout", &self.stdout.as_deref().map(str::from_utf8))
+            .field("stderr", &self.stderr.as_deref().map(str::from_utf8))
+            .finish()
     }
 }

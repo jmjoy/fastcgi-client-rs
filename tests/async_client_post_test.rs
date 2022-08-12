@@ -1,6 +1,6 @@
 use fastcgi_client::{request::Request, Client, Params};
-use std::{env::current_dir, time::Duration};
-use tokio::{net::TcpStream, time::timeout};
+use std::{env::current_dir, io::Cursor, time::Duration};
+use tokio::{net::TcpStream, time::timeout, try_join};
 
 mod common;
 
@@ -39,14 +39,11 @@ async fn test() {
         .set_content_type("application/x-www-form-urlencoded")
         .set_content_length(&len);
 
-    let _ = client
-        .execute(Request::new(params.clone(), &mut &body[..]))
-        .await
-        .unwrap();
-    let output = client
-        .execute(Request::new(params, &mut &body[..]))
-        .await
-        .unwrap();
+    let (output, _) = try_join!(
+        client.execute(Request::new(params.clone(), Cursor::new(body))),
+        client.execute(Request::new(params, Cursor::new(body)))
+    )
+    .unwrap();
 
     let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));

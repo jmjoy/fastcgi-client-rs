@@ -8,17 +8,16 @@ Fastcgi client implemented for Rust, power by [tokio](https://crates.io/crates/t
 
 ## Installation
 
-Add this to your Cargo.toml:
+Add dependencies to your `Cargo.toml` by `cargo add`:
 
-```toml
-[dependencies]
-fastcgi-client = "0.7"
-tokio = { version = "1", features = ["full"] }
+```shell
+cargo add tokio --features full
+cargo add fastcgi-client
 ```
 
 ## Examples
 
-```
+```rust, no_run
 use fastcgi_client::{Client, Params, Request};
 use std::env;
 use tokio::{io, task};
@@ -66,4 +65,5 @@ async fn main() {
 ```
 
 ## License
+
 [MIT](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).
