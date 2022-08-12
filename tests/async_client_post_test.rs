@@ -4,12 +4,12 @@ use tokio::{net::TcpStream, time::timeout};
 
 mod common;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new(stream, true);
+    let mut client = Client::new_keep_alive(stream);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
@@ -58,12 +58,12 @@ async fn test() {
     assert!(stderr.contains("PHP message: PHP Fatal error:  Uncaught Exception: TEST"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn post_big_body() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new(stream, true);
+    let mut client = Client::new_keep_alive(stream);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();

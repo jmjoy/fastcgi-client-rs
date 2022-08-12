@@ -1,4 +1,4 @@
-use fastcgi_client::{request::Request, Client, Params};
+use fastcgi_client::{conn::Short, id::FixRequestIdAllocator, request::Request, Client, Params};
 use std::env::current_dir;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
@@ -7,15 +7,17 @@ use tokio::{
 
 mod common;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    test_client(&mut Client::new(stream, false)).await;
+    test_client(Client::new(stream)).await;
 }
 
-async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S>) {
+async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(
+    client: Client<S, Short, FixRequestIdAllocator>,
+) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()
@@ -41,7 +43,7 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S>) 
         .set_content_length("0");
 
     let output = client
-        .execute(Request::new(params, &mut io::empty()))
+        .execute_once(Request::new(params, &mut io::empty()))
         .await
         .unwrap();
 

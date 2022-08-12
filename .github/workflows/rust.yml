@@ -26,9 +26,11 @@ jobs:
       run: docker run -d --name php-fpm -v $PWD:$PWD -p 9000:9000 php:7.1.30-fpm -c /usr/local/etc/php/php.ini-development
     - name: Fmt
       run: cargo +nightly fmt --all -- --check
-    - name: Build
-      run: cargo build --release --verbose
+    - name: Check
+      run: cargo check --release
+    - name: Clippy
+      run: cargo clippy --release
     - name: Test
-      run: cargo test --release --verbose
+      run: cargo test --release
     - name: Doc
-      run: cargo doc --verbose
+      run: cargo rustdoc --release

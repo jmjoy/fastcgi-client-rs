@@ -1,77 +1,102 @@
 use crate::{
-    id::RequestIdGenerator,
+    conn::{KeepAlive, Mode, Short},
+    id::{AllocRequestId, FixRequestIdAllocator, PooledRequestIdAllocator},
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
     request::Request,
     response::ResponseMap,
     ClientError, ClientResult, Response,
 };
-use log::debug;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, marker::PhantomData};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tracing::debug;
 
 /// Async client for handling communication between fastcgi server.
-pub struct Client<S: AsyncRead + AsyncWrite + Unpin> {
+pub struct Client<S, M, A> {
     stream: S,
-    keep_alive: bool,
-    request_id_generator: RequestIdGenerator,
+    id_allocator: A,
     outputs: ResponseMap,
+    _mode: PhantomData<M>,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, Short, FixRequestIdAllocator> {
     /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
-    /// or `tokio::net::UnixStream`.
-    pub fn new(stream: S, keep_alive: bool) -> Self {
+    /// or `tokio::net::UnixStream`, under short connection mode.
+    pub fn new(stream: S) -> Self {
         Self {
             stream,
-            keep_alive,
-            request_id_generator: RequestIdGenerator::new(Duration::from_millis(1500)),
+            id_allocator: FixRequestIdAllocator,
             outputs: HashMap::new(),
+            _mode: PhantomData,
         }
     }
 
-    /// Send request and receive response from fastcgi server.
-    pub async fn execute<I: AsyncRead + Unpin>(
-        &mut self,
-        request: Request<'_, I>,
+    /// Send request and receive response from fastcgi server, under short
+    /// connection mode.
+    pub async fn execute_once<I: AsyncRead + Unpin>(
+        mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
-        let id = self.request_id_generator.alloc().await?;
+        self.do_execute(request).await
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive, PooledRequestIdAllocator> {
+    /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
+    /// or `tokio::net::UnixStream`, under keep alive connection mode.
+    pub fn new_keep_alive(stream: S) -> Self {
+        Self {
+            stream,
+            id_allocator: PooledRequestIdAllocator::default(),
+            outputs: HashMap::new(),
+            _mode: PhantomData,
+        }
+    }
+
+    /// Send request and receive response from fastcgi server, under keep alive
+    /// connection mode.
+    pub async fn execute<I: AsyncRead + Unpin>(
+        &mut self, request: Request<'_, I>,
+    ) -> ClientResult<Response> {
+        self.do_execute(request).await
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Client<S, M, A> {
+    async fn do_execute<I: AsyncRead + Unpin>(
+        &mut self, request: Request<'_, I>,
+    ) -> ClientResult<Response> {
+        let id = self.id_allocator.alloc()?;
         let result = self.inner_execute(request, id).await;
-        self.request_id_generator.release(id).await;
+        self.id_allocator.release(id);
         result
     }
 
     async fn inner_execute<I: AsyncRead + Unpin>(
-        &mut self,
-        mut request: Request<'_, I>,
-        id: u16,
+        &mut self, mut request: Request<'_, I>, id: u16,
     ) -> ClientResult<Response> {
         self.handle_request(id, &request.params, &mut request.stdin)
             .await?;
         self.handle_response(id).await?;
-        Ok(self
-            .outputs
+        self.outputs
             .get(&id)
-            .map(|output| output.clone())
-            .ok_or_else(|| ClientError::RequestIdNotFound { id })?)
+            .cloned()
+            .ok_or(ClientError::RequestIdNotFound { id })
     }
 
     async fn handle_request<'a, I: AsyncRead + Unpin>(
-        &mut self,
-        id: u16,
-        params: &Params<'a>,
-        body: &mut I,
+        &mut self, id: u16, params: &Params<'a>, body: &mut I,
     ) -> ClientResult<()> {
         let write_stream = &mut self.stream;
 
-        debug!("[id = {}] Start handle request.", id);
+        debug!(id, "Start handle request");
 
-        let begin_request_rec = BeginRequestRec::new(id, Role::Responder, self.keep_alive).await?;
-        debug!("[id = {}] Send to stream: {:?}.", id, &begin_request_rec);
+        let begin_request_rec =
+            BeginRequestRec::new(id, Role::Responder, <M>::is_keep_alive()).await?;
+        debug!(id, ?begin_request_rec, "Send to stream.");
         begin_request_rec.write_to_stream(write_stream).await?;
 
         let param_pairs = ParamPairs::new(params);
-        debug!("[id = {}] Params will be sent: {:?}.", id, &param_pairs);
+        debug!(id, ?param_pairs, "Params will be sent.");
 
         Header::write_to_stream_batches(
             RequestType::Params,
@@ -79,7 +104,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
             write_stream,
             &mut &param_pairs.to_content().await?[..],
             Some(|header| {
-                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!(id, ?header, "Send to stream for Params.");
                 header
             }),
         )
@@ -91,7 +116,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
             write_stream,
             &mut tokio::io::empty(),
             Some(|header| {
-                debug!("[id = {}] Send to stream for Params: {:?}.", id, &header);
+                debug!(id, ?header, "Send to stream for Params.");
                 header
             }),
         )
@@ -103,7 +128,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
             write_stream,
             body,
             Some(|header| {
-                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!(id, ?header, "Send to stream for Stdin.");
                 header
             }),
         )
@@ -115,7 +140,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
             write_stream,
             &mut tokio::io::empty(),
             Some(|header| {
-                debug!("[id = {}] Send to stream for Stdin: {:?}.", id, &header);
+                debug!(id, ?header, "Send to stream for Stdin.");
                 header
             }),
         )
@@ -132,10 +157,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
         let global_end_request_rec = loop {
             let read_stream = &mut self.stream;
             let header = Header::new_from_stream(read_stream).await?;
-            debug!("[id = {}] Receive from stream: {:?}.", id, &header);
+            debug!(id, ?header, "Receive from stream.");
 
             if header.request_id != id {
-                return Err(ClientError::ResponseNotFound { id }.into());
+                return Err(ClientError::ResponseNotFound { id });
             }
 
             match header.r#type {
@@ -149,14 +174,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, read_stream).await?;
-                    debug!("[id = {}] Receive from stream: {:?}.", id, &end_request_rec);
+                    debug!(id, ?end_request_rec, "Receive from stream.");
                     break Some(end_request_rec);
                 }
                 r#type => {
                     return Err(ClientError::UnknownRequestType {
                         request_type: r#type,
-                    }
-                    .into())
+                    })
                 }
             }
         };
@@ -177,6 +201,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
     fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Response> {
         self.outputs
             .get_mut(&id)
-            .ok_or_else(|| ClientError::RequestIdNotFound { id }.into())
+            .ok_or(ClientError::RequestIdNotFound { id })
     }
 }

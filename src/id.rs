@@ -1,55 +1,42 @@
 use crate::{ClientError, ClientResult};
-use std::{collections::HashSet, time::Duration};
-use tokio::{
-    sync::Mutex,
-    time::{sleep, timeout},
-};
+use std::collections::LinkedList;
 
-const MAX_REQUEST_ID: u16 = u16::max_value() - 1;
+pub trait AllocRequestId {
+    fn alloc(&mut self) -> ClientResult<u16>;
 
-pub(crate) struct RequestIdGenerator {
-    id: Mutex<u16>,
-    ids: Mutex<HashSet<u16>>,
-    timeout: Duration,
+    fn release(&mut self, id: u16);
 }
 
-impl RequestIdGenerator {
-    pub(crate) fn new(timeout: Duration) -> Self {
-        Self {
-            id: Mutex::new(0),
-            ids: Default::default(),
-            timeout,
+pub struct FixRequestIdAllocator;
+
+impl AllocRequestId for FixRequestIdAllocator {
+    fn alloc(&mut self) -> ClientResult<u16> {
+        Ok(0)
+    }
+
+    fn release(&mut self, _id: u16) {}
+}
+
+pub struct PooledRequestIdAllocator {
+    ids: LinkedList<u16>,
+}
+
+impl Default for PooledRequestIdAllocator {
+    fn default() -> Self {
+        let mut ids = LinkedList::new();
+        for id in 0..u16::max_value() {
+            ids.push_front(id);
         }
+        Self { ids }
+    }
+}
+
+impl AllocRequestId for PooledRequestIdAllocator {
+    fn alloc(&mut self) -> ClientResult<u16> {
+        self.ids.pop_back().ok_or(ClientError::RequestIdExhausted)
     }
 
-    pub(crate) async fn alloc(&self) -> ClientResult<u16> {
-        timeout(self.timeout, self.inner_alloc())
-            .await
-            .map_err(|_| ClientError::RequestIdGenerateTimeout)
-    }
-
-    async fn inner_alloc(&self) -> u16 {
-        let mut id = self.id.lock().await;
-
-        loop {
-            if *id >= MAX_REQUEST_ID {
-                *id = 0;
-            }
-            *id += 1;
-
-            let ids = self.ids.lock().await;
-            if ids.contains(&id) {
-                drop(ids);
-                sleep(Duration::from_millis(10)).await;
-            } else {
-                break;
-            }
-        }
-
-        *id
-    }
-
-    pub(crate) async fn release(&self, id: u16) {
-        self.ids.lock().await.remove(&id);
+    fn release(&mut self, id: u16) {
+        self.ids.push_back(id);
     }
 }
