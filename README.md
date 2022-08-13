@@ -17,11 +17,12 @@ cargo add fastcgi-client
 
 ## Examples
 
+Short connection mode:
+
 ```rust, no_run
 use fastcgi_client::{Client, Params, Request};
 use std::env;
-use tokio::{io, task};
-use tokio::net::TcpStream;
+use tokio::{io, net::TcpStream};
 
 #[tokio::main]
 async fn main() {
@@ -35,7 +36,7 @@ async fn main() {
 
     // Connect to php-fpm default listening address.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new(stream, false);
+    let mut client = Client::new(stream);
 
     // Fastcgi params, please reference to nginx-php-fpm config.
     let params = Params::default()
@@ -53,7 +54,7 @@ async fn main() {
         .set_content_length("0");
 
     // Fetch fastcgi server(php-fpm) response.
-    let output = client.execute(Request::new(params, &mut io::empty())).await.unwrap();
+    let output = client.execute_once(Request::new(params, &mut io::empty())).await.unwrap();
 
     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
     let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
@@ -61,6 +62,36 @@ async fn main() {
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("hello"));
     assert_eq!(output.get_stderr(), None);
+}
+```
+
+Keep alive mode:
+
+```rust, no_run
+use fastcgi_client::{Client, Params, Request};
+use std::env;
+use tokio::{io, net::TcpStream};
+
+#[tokio::main]
+async fn main() {
+    // Connect to php-fpm default listening address.
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    let mut client = Client::new_keep_alive(stream);
+
+    // Fastcgi params, please reference to nginx-php-fpm config.
+    let params = Params::default();
+
+    for _ in (0..3) {
+        // Fetch fastcgi server(php-fpm) response.
+        let output = client.execute(Request::new(params, &mut io::empty())).await.unwrap();
+
+        // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+        let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+
+        assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+        assert!(stdout.contains("hello"));
+        assert_eq!(output.get_stderr(), None);
+    }
 }
 ```
 
