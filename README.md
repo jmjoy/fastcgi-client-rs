@@ -83,7 +83,7 @@ async fn main() {
 
     for _ in (0..3) {
         // Fetch fastcgi server(php-fpm) response.
-        let output = client.execute(Request::new(params, &mut io::empty())).await.unwrap();
+        let output = client.execute(Request::new(params.clone(), &mut io::empty())).await.unwrap();
 
         // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
         let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
