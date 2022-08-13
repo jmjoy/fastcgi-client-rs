@@ -34,11 +34,6 @@ pub enum ClientError {
     /// status, see fastcgi protocol.
     #[error("Role value not known [UnknownRole]; AppStatus: {app_status}")]
     EndRequestUnknownRole { app_status: u32 },
-
-    /// Request id has exhausted, the count of  current requests more than
-    /// 65536.
-    #[error("Request id has exhausted")]
-    RequestIdExhausted,
 }
 
 impl ClientError {

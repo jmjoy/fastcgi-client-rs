@@ -2,7 +2,7 @@
 
 extern crate test;
 
-use fastcgi_client::{request::Request, Client, Params};
+use fastcgi_client::{conn::KeepAlive, request::Request, Client, Params};
 use std::env::current_dir;
 use test::Bencher;
 use tokio::{
@@ -12,7 +12,7 @@ use tokio::{
 
 mod common;
 
-async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S>) {
+async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S, KeepAlive>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()
@@ -61,7 +61,7 @@ fn bench_execute(b: &mut Bencher) {
 
     let mut client = rt.block_on(async {
         let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-        Client::new(stream, true)
+        Client::new_keep_alive(stream)
     });
 
     b.iter(|| {

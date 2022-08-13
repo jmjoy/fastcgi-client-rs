@@ -1,5 +1,4 @@
 use std::sync::Once;
-
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 

@@ -5,7 +5,6 @@
 pub mod client;
 pub mod conn;
 mod error;
-pub mod id;
 mod meta;
 pub mod params;
 pub mod request;

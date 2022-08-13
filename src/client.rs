@@ -1,41 +1,31 @@
 use crate::{
-    conn::{KeepAlive, Mode, Short, Split},
-    id::{AllocRequestId, FixRequestIdAllocator, PooledRequestIdAllocator},
+    conn::{KeepAlive, Mode, ShortConn},
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
     request::Request,
-    response::ResponseMap,
     ClientError, ClientResult, Response,
 };
-use std::{collections::HashMap, future::Future, marker::PhantomData};
-use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    sync::Mutex,
-};
+use std::marker::PhantomData;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::debug;
 
+/// I refer to nignx fastcgi implementation, found the request id is always 1.
+///
+/// <https://github.com/nginx/nginx/blob/f7ea8c76b55f730daa3b63f5511feb564b44d901/src/http/modules/ngx_http_fastcgi_module.c>
+const REQUEST_ID: u16 = 1;
+
 /// Async client for handling communication between fastcgi server.
-pub struct Client<R, W, M, A> {
-    read: Mutex<Option<R>>,
-    write: Mutex<W>,
-    id_allocator: Mutex<A>,
-    outputs: ResponseMap,
+pub struct Client<S, M> {
+    stream: S,
     _mode: PhantomData<M>,
 }
 
-impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Client<R, W, Short, FixRequestIdAllocator> {
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
     /// or `tokio::net::UnixStream`, under short connection mode.
-    pub fn new<S>(stream: S) -> Self
-    where
-        S: Split<Read = R, Write = W>,
-    {
-        let (read, write) = stream.split();
+    pub fn new(stream: S) -> Self {
         Self {
-            read: Mutex::new(Some(read)),
-            write: Mutex::new(write),
-            id_allocator: Mutex::new(FixRequestIdAllocator),
-            outputs: HashMap::new(),
+            stream,
             _mode: PhantomData,
         }
     }
@@ -43,43 +33,18 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Client<R, W, Short, FixRequest
     /// Send request and receive response from fastcgi server, under short
     /// connection mode.
     pub async fn execute_once<I: AsyncRead + Unpin>(
-        mut self, mut request: Request<'_, I>,
+        mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
-        let id = self.id_allocator.get_mut().alloc()?;
-        self.handle_request_short(id, &request.params, &mut request.stdin)
-            .await?;
-        let result = Self::handle_response(self.read.get_mut().as_mut().unwrap(), Some(id)).await;
-        self.id_allocator.get_mut().release(id);
-        result
-    }
-
-    async fn handle_request_short<'a, I: AsyncRead + Unpin>(
-        &mut self, id: u16, params: &Params<'a>, body: &mut I,
-    ) -> ClientResult<()> {
-        let write = self.write.get_mut();
-        Self::handle_request_start(write, id).await?;
-        Self::handle_request_params(write, id, params).await?;
-        Self::handle_request_body(write, id, body).await?;
-        Self::handle_request_flush(write).await?;
-        Ok(())
+        self.inner_execute(request).await
     }
 }
 
-impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>
-    Client<R, W, KeepAlive, PooledRequestIdAllocator>
-{
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
     /// or `tokio::net::UnixStream`, under keep alive connection mode.
-    pub fn new_keep_alive<S>(stream: S) -> Self
-    where
-        S: Split<Read = R, Write = W>,
-    {
-        let (read, write) = stream.split();
+    pub fn new_keep_alive(stream: S) -> Self {
         Self {
-            read: Mutex::new(Some(read)),
-            write: Mutex::new(write),
-            id_allocator: Mutex::new(PooledRequestIdAllocator::default()),
-            outputs: HashMap::new(),
+            stream,
             _mode: PhantomData,
         }
     }
@@ -87,29 +52,37 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>
     /// Send request and receive response from fastcgi server, under keep alive
     /// connection mode.
     pub async fn execute<I: AsyncRead + Unpin>(
-        &self, request: Request<'_, I>,
+        &mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
-        let id = self.id_allocator.lock().await.alloc()?;
-        let result = self.inner_execute(request, id).await;
-        self.id_allocator.lock().await.release(id);
-        result
+        self.inner_execute(request).await
     }
 }
 
-impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Client<R, W, M, A> {
-    // async fn inner_execute<I: AsyncRead + Unpin>(
-    //     &mut self, mut request: Request<'_, I>, id: u16,
-    // ) -> ClientResult<Response> {
-    //     self.handle_request(id, &request.params, &mut request.stdin)
-    //         .await?;
-    //     self.handle_response(id).await?;
-    //     self.outputs
-    //         .get(&id)
-    //         .cloned()
-    //         .ok_or(ClientError::RequestIdNotFound { id })
-    // }
+impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
+    async fn inner_execute<I: AsyncRead + Unpin>(
+        &mut self, mut request: Request<'_, I>,
+    ) -> ClientResult<Response> {
+        Self::handle_request(
+            &mut self.stream,
+            REQUEST_ID,
+            &request.params,
+            &mut request.stdin,
+        )
+        .await?;
+        Self::handle_response(&mut self.stream, REQUEST_ID).await
+    }
 
-    async fn handle_request_start(write_stream: &mut W, id: u16) -> ClientResult<()> {
+    async fn handle_request<'a, I: AsyncRead + Unpin>(
+        stream: &mut S, id: u16, params: &Params<'a>, body: &mut I,
+    ) -> ClientResult<()> {
+        Self::handle_request_start(stream, id).await?;
+        Self::handle_request_params(stream, id, params).await?;
+        Self::handle_request_body(stream, id, body).await?;
+        Self::handle_request_flush(stream).await?;
+        Ok(())
+    }
+
+    async fn handle_request_start(stream: &mut S, id: u16) -> ClientResult<()> {
         debug!(id, "Start handle request");
 
         let begin_request_rec =
@@ -117,13 +90,13 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
 
         debug!(id, ?begin_request_rec, "Send to stream.");
 
-        begin_request_rec.write_to_stream(write_stream).await?;
+        begin_request_rec.write_to_stream(stream).await?;
 
         Ok(())
     }
 
     async fn handle_request_params<'a>(
-        write_stream: &mut W, id: u16, params: &Params<'a>,
+        stream: &mut S, id: u16, params: &Params<'a>,
     ) -> ClientResult<()> {
         let param_pairs = ParamPairs::new(params);
         debug!(id, ?param_pairs, "Params will be sent.");
@@ -131,7 +104,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
         Header::write_to_stream_batches(
             RequestType::Params,
             id,
-            write_stream,
+            stream,
             &mut &param_pairs.to_content().await?[..],
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Params.");
@@ -143,7 +116,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
         Header::write_to_stream_batches(
             RequestType::Params,
             id,
-            write_stream,
+            stream,
             &mut tokio::io::empty(),
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Params.");
@@ -156,12 +129,12 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
     }
 
     async fn handle_request_body<I: AsyncRead + Unpin>(
-        write_stream: &mut W, id: u16, body: &mut I,
+        stream: &mut S, id: u16, body: &mut I,
     ) -> ClientResult<()> {
         Header::write_to_stream_batches(
             RequestType::Stdin,
             id,
-            write_stream,
+            stream,
             body,
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Stdin.");
@@ -173,7 +146,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
         Header::write_to_stream_batches(
             RequestType::Stdin,
             id,
-            write_stream,
+            stream,
             &mut tokio::io::empty(),
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Stdin.");
@@ -185,36 +158,33 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
         Ok(())
     }
 
-    async fn handle_request_flush(write_stream: &mut W) -> ClientResult<()> {
-        write_stream.flush().await?;
+    async fn handle_request_flush(stream: &mut S) -> ClientResult<()> {
+        stream.flush().await?;
 
         Ok(())
     }
 
-    async fn handle_response(read_stream: &mut R, id: Option<u16>) -> ClientResult<Response> {
+    async fn handle_response(stream: &mut S, id: u16) -> ClientResult<Response> {
         let mut response = Response::default();
 
         loop {
-            let header = Header::new_from_stream(read_stream).await?;
-            debug!(id, ?header, "Receive from stream.");
-
-            if let Some(id) = id {
-                if header.request_id != id {
-                    return Err(ClientError::ResponseNotFound { id });
-                }
+            let header = Header::new_from_stream(stream).await?;
+            if header.request_id != id {
+                return Err(ClientError::ResponseNotFound { id });
             }
+            debug!(id, ?header, "Receive from stream.");
 
             match header.r#type {
                 RequestType::Stdout => {
-                    let content = header.read_content_from_stream(read_stream).await?;
+                    let content = header.read_content_from_stream(stream).await?;
                     response.set_stdout(content);
                 }
                 RequestType::Stderr => {
-                    let content = header.read_content_from_stream(read_stream).await?;
+                    let content = header.read_content_from_stream(stream).await?;
                     response.set_stderr(content);
                 }
                 RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_header(&header, read_stream).await?;
+                    let end_request_rec = EndRequestRec::from_header(&header, stream).await?;
                     debug!(id, ?end_request_rec, "Receive from stream.");
 
                     end_request_rec
@@ -222,7 +192,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
                         .protocol_status
                         .convert_to_client_result(end_request_rec.end_request.app_status)?;
 
-                    break Ok(response);
+                    return Ok(response);
                 }
                 r#type => {
                     return Err(ClientError::UnknownRequestType {
@@ -231,15 +201,5 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, M: Mode, A: AllocRequestId> Cl
                 }
             }
         }
-    }
-
-    fn init_output(&mut self, id: u16) {
-        self.outputs.insert(id, Default::default());
-    }
-
-    fn get_output_mut(&mut self, id: u16) -> ClientResult<&mut Response> {
-        self.outputs
-            .get_mut(&id)
-            .ok_or(ClientError::RequestIdNotFound { id })
     }
 }

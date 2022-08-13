@@ -1,4 +1,4 @@
-use fastcgi_client::{conn::Short, id::FixRequestIdAllocator, request::Request, Client, Params};
+use fastcgi_client::{conn::ShortConn, request::Request, Client, Params};
 use std::env::current_dir;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
@@ -15,9 +15,7 @@ async fn test() {
     test_client(Client::new(stream)).await;
 }
 
-async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(
-    client: Client<S, Short, FixRequestIdAllocator>,
-) {
+async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortConn>) {
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
     let script_name = current_dir()
