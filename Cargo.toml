@@ -1,6 +1,6 @@
 [package]
 name = "fastcgi-client"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["jmjoy <918734043@qq.com>"]
 edition = "2018"
 description = "Fastcgi client implemented for Rust."
@@ -10,11 +10,10 @@ readme = "README.md"
 keywords = ["fastcgi", "fcgi", "client", "tokio", "php"]
 
 [dependencies]
-http = "0.2"
-log = "0.4"
-thiserror = "1"
-tokio = { version = "1", features = ["io-util", "sync", "time"] }
+thiserror = "1.0.32"
+tokio = { version = "1.20.1", features = ["io-util", "sync", "time"] }
+tracing = "0.1.36"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
-env_logger = "0.8"
+tokio = { version = "1.20.1", features = ["full"] }
+tracing-subscriber = "0.3.15"

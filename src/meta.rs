@@ -66,10 +66,7 @@ pub(crate) struct Header {
 
 impl Header {
     pub(crate) async fn write_to_stream_batches<F, R, W>(
-        r#type: RequestType,
-        request_id: u16,
-        writer: &mut W,
-        content: &mut R,
+        r#type: RequestType, request_id: u16, writer: &mut W, content: &mut R,
         before_write: Option<F>,
     ) -> io::Result<()>
     where
@@ -111,9 +108,7 @@ impl Header {
     }
 
     async fn write_to_stream<W: AsyncWrite + Unpin>(
-        self,
-        writer: &mut W,
-        content: &[u8],
+        self, writer: &mut W, content: &[u8],
     ) -> io::Result<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
@@ -147,8 +142,7 @@ impl Header {
     }
 
     pub(crate) async fn read_content_from_stream<R: AsyncRead + Unpin>(
-        &self,
-        reader: &mut R,
+        &self, reader: &mut R,
     ) -> io::Result<Vec<u8>> {
         let mut buf = vec![0; self.content_length as usize];
         reader.read_exact(&mut buf).await?;
@@ -211,8 +205,7 @@ impl BeginRequestRec {
     }
 
     pub(crate) async fn write_to_stream<W: AsyncWrite + Unpin>(
-        self,
-        writer: &mut W,
+        self, writer: &mut W,
     ) -> io::Result<()> {
         self.header.write_to_stream(writer, &self.content).await
     }
@@ -349,7 +342,9 @@ impl ProtocolStatus {
     pub(crate) fn convert_to_client_result(self, app_status: u32) -> ClientResult<()> {
         match self {
             ProtocolStatus::RequestComplete => Ok(()),
-            _ => Err(ClientError::new_end_request_with_protocol_status(self, app_status).into()),
+            _ => Err(ClientError::new_end_request_with_protocol_status(
+                self, app_status,
+            )),
         }
     }
 }
@@ -358,19 +353,20 @@ impl ProtocolStatus {
 pub struct EndRequest {
     pub(crate) app_status: u32,
     pub(crate) protocol_status: ProtocolStatus,
+    #[allow(dead_code)]
     reserved: [u8; 3],
 }
 
 #[derive(Debug)]
 pub(crate) struct EndRequestRec {
+    #[allow(dead_code)]
     header: Header,
     pub(crate) end_request: EndRequest,
 }
 
 impl EndRequestRec {
     pub(crate) async fn from_header<R: AsyncRead + Unpin>(
-        header: &Header,
-        reader: &mut R,
+        header: &Header, reader: &mut R,
     ) -> io::Result<Self> {
         let header = header.clone();
         let mut content = &*header.read_content_from_stream(reader).await?;

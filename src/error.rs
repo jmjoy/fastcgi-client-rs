@@ -20,27 +20,25 @@ pub enum ClientError {
     #[error("Response not found of request id `{request_type}`")]
     UnknownRequestType { request_type: RequestType },
 
-    /// Response not complete, first is protocol status and second is app status, see fastcgi protocol.
+    /// Response not complete, first is protocol status and second is app
+    /// status, see fastcgi protocol.
     #[error("This app can't multiplex [CantMpxConn]; AppStatus: {app_status}")]
     EndRequestCantMpxConn { app_status: u32 },
 
-    /// Response not complete, first is protocol status and second is app status, see fastcgi protocol.
+    /// Response not complete, first is protocol status and second is app
+    /// status, see fastcgi protocol.
     #[error("New request rejected; too busy [OVERLOADED]; AppStatus: {app_status}")]
     EndRequestOverloaded { app_status: u32 },
 
-    /// Response not complete, first is protocol status and second is app status, see fastcgi protocol.
+    /// Response not complete, first is protocol status and second is app
+    /// status, see fastcgi protocol.
     #[error("Role value not known [UnknownRole]; AppStatus: {app_status}")]
     EndRequestUnknownRole { app_status: u32 },
-
-    /// Try to get lock of RequestIdGenerator timeout.
-    #[error("Try to get lock of RequestIdGenerator timeout")]
-    RequestIdGenerateTimeout,
 }
 
 impl ClientError {
     pub(crate) fn new_end_request_with_protocol_status(
-        protocol_status: ProtocolStatus,
-        app_status: u32,
+        protocol_status: ProtocolStatus, app_status: u32,
     ) -> Self {
         match protocol_status {
             ProtocolStatus::CantMpxConn => ClientError::EndRequestCantMpxConn { app_status },
