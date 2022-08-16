@@ -35,23 +35,22 @@ async fn post_big_body() {
     let script_name = script_name.to_str().unwrap();
 
     let body = [0u8; 131072];
-    let len = format!("{}", body.len());
 
     let params = Params::default()
-        .set_request_method("POST")
-        .set_document_root(document_root)
-        .set_script_name("/body-size.php")
-        .set_script_filename(script_name)
-        .set_request_uri("/body-size.php")
-        .set_query_string("")
-        .set_document_uri("/body-size.php")
-        .set_remote_addr("127.0.0.1")
-        .set_remote_port("12345")
-        .set_server_addr("127.0.0.1")
-        .set_server_port("80")
-        .set_server_name("jmjoy-pc")
-        .set_content_type("text/plain")
-        .set_content_length(&len);
+        .request_method("POST")
+        .document_root(document_root)
+        .script_name("/body-size.php")
+        .script_filename(script_name)
+        .request_uri("/body-size.php")
+        .query_string("")
+        .document_uri("/body-size.php")
+        .remote_addr("127.0.0.1")
+        .remote_port(12345)
+        .server_addr("127.0.0.1")
+        .server_port(80)
+        .server_name("jmjoy-pc")
+        .content_type("text/plain")
+        .content_length(body.len());
 
     let output = timeout(
         Duration::from_secs(3),

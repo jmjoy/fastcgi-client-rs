@@ -42,23 +42,22 @@ async fn single() {
     let script_name = script_name.to_str().unwrap();
 
     let body = b"p1=3&p2=4";
-    let len = format!("{}", body.len());
 
     let params = Params::default()
-        .set_request_method("POST")
-        .set_document_root(document_root)
-        .set_script_name("/post.php")
-        .set_script_filename(script_name)
-        .set_request_uri("/post.php?g1=1&g2=2")
-        .set_query_string("g1=1&g2=2")
-        .set_document_uri("/post.php")
-        .set_remote_addr("127.0.0.1")
-        .set_remote_port("12345")
-        .set_server_addr("127.0.0.1")
-        .set_server_port("80")
-        .set_server_name("jmjoy-pc")
-        .set_content_type("application/x-www-form-urlencoded")
-        .set_content_length(&len);
+        .request_method("POST")
+        .document_root(document_root)
+        .script_name("/post.php")
+        .script_filename(script_name)
+        .request_uri("/post.php?g1=1&g2=2")
+        .query_string("g1=1&g2=2")
+        .document_uri("/post.php")
+        .remote_addr("127.0.0.1")
+        .remote_port(12345)
+        .server_addr("127.0.0.1")
+        .server_port(80)
+        .server_name("jmjoy-pc")
+        .content_type("application/x-www-form-urlencoded")
+        .content_length(body.len());
 
     for _ in 0..3 {
         let output = client

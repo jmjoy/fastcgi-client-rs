@@ -16,6 +16,7 @@ use std::{fmt, fmt::Debug, str};
 
 /// Output of fastcgi request, contains STDOUT and STDERR.
 #[derive(Default, Clone)]
+#[non_exhaustive]
 pub struct Response {
     stdout: Option<Vec<u8>>,
     stderr: Option<Vec<u8>>,
