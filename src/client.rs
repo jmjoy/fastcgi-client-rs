@@ -185,11 +185,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
             match header.r#type {
                 RequestType::Stdout => {
                     let content = header.read_content_from_stream(stream).await?;
-                    response.set_stdout(content);
+                    response.stdout = Some(content);
                 }
                 RequestType::Stderr => {
                     let content = header.read_content_from_stream(stream).await?;
-                    response.set_stderr(content);
+                    response.stderr = Some(content);
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, stream).await?;

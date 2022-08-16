@@ -59,9 +59,9 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
         .await
         .unwrap();
 
-    let stdout = String::from_utf8(output.get_stdout().unwrap_or(Default::default())).unwrap();
+    let stdout = String::from_utf8(output.stdout.unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("\r\n\r\n"));
     assert!(stdout.contains("hello"));
-    assert_eq!(output.get_stderr(), None);
+    assert_eq!(output.stderr, None);
 }

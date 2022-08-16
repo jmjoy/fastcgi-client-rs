@@ -57,11 +57,11 @@ async fn main() {
     let output = client.execute_once(Request::new(params, &mut io::empty())).await.unwrap();
 
     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-    let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+    let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
 
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("hello"));
-    assert_eq!(output.get_stderr(), None);
+    assert_eq!(output.stderr, None);
 }
 ```
 
@@ -86,11 +86,11 @@ async fn main() {
         let output = client.execute(Request::new(params.clone(), &mut io::empty())).await.unwrap();
 
         // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-        let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+        let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
 
         assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
         assert!(stdout.contains("hello"));
-        assert_eq!(output.get_stderr(), None);
+        assert_eq!(output.stderr, None);
     }
 }
 ```
