@@ -12,37 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Publish
+name: License
 
 on:
   push:
-    tags: [ "**" ]
-
-env:
-  RUST_LOG: debug
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: "1"
-  RUSTFLAGS: "-D warnings"
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ "**" ]
 
 jobs:
-  publish:
-    name: Publish
-
+  license:
     runs-on: ubuntu-20.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
         with:
           submodules: 'recursive'
-
-      - name: Install Rust Stable
-        uses: actions-rs/toolchain@v1
+      - name: Check License Header
+        uses: apache/skywalking-eyes/header/@501a28d2fb4a9b962661987e50cf0219631b32ff
         with:
-          toolchain: stable
-          override: true
-
-      - name: Cargo publish
-        uses: actions-rs/cargo@v1
+          config: .licenserc.yaml
+      - name: Check Dependencies License
+        uses: apache/skywalking-eyes/dependency/@501a28d2fb4a9b962661987e50cf0219631b32ff
         with:
-          command: publish
+          config: .licenserc.yaml
