@@ -16,10 +16,10 @@
 name = "fastcgi-client"
 version = "0.8.0-alpha.2"
 authors = ["jmjoy <jmjoy@apache.org>"]
-edition = "2018"
+edition = "2021"
 description = "Fastcgi client implemented for Rust."
 repository = "https://github.com/jmjoy/fastcgi-client-rs"
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 keywords = ["fastcgi", "fcgi", "client", "tokio", "php"]
 

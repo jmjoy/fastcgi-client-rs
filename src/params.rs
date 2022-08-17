@@ -23,86 +23,103 @@ use std::{
 pub struct Params<'a>(HashMap<Cow<'a, str>, Cow<'a, str>>);
 
 impl<'a> Params<'a> {
+    #[inline]
     pub fn gateway_interface<S: Into<Cow<'a, str>>>(mut self, gateway_interface: S) -> Self {
         self.insert("GATEWAY_INTERFACE".into(), gateway_interface.into());
         self
     }
 
+    #[inline]
     pub fn server_software<S: Into<Cow<'a, str>>>(mut self, server_software: S) -> Self {
         self.insert("SERVER_SOFTWARE".into(), server_software.into());
         self
     }
 
+    #[inline]
     pub fn server_protocol<S: Into<Cow<'a, str>>>(mut self, server_protocol: S) -> Self {
         self.insert("SERVER_PROTOCOL".into(), server_protocol.into());
         self
     }
 
+    #[inline]
     pub fn request_method<S: Into<Cow<'a, str>>>(mut self, request_method: S) -> Self {
         self.insert("REQUEST_METHOD".into(), request_method.into());
         self
     }
 
+    #[inline]
     pub fn script_filename<S: Into<Cow<'a, str>>>(mut self, script_filename: S) -> Self {
         self.insert("SCRIPT_FILENAME".into(), script_filename.into());
         self
     }
 
+    #[inline]
     pub fn script_name<S: Into<Cow<'a, str>>>(mut self, script_name: S) -> Self {
         self.insert("SCRIPT_NAME".into(), script_name.into());
         self
     }
 
+    #[inline]
     pub fn query_string<S: Into<Cow<'a, str>>>(mut self, query_string: S) -> Self {
         self.insert("QUERY_STRING".into(), query_string.into());
         self
     }
 
+    #[inline]
     pub fn request_uri<S: Into<Cow<'a, str>>>(mut self, request_uri: S) -> Self {
         self.insert("REQUEST_URI".into(), request_uri.into());
         self
     }
 
+    #[inline]
     pub fn document_root<S: Into<Cow<'a, str>>>(mut self, document_root: S) -> Self {
         self.insert("DOCUMENT_ROOT".into(), document_root.into());
         self
     }
 
+    #[inline]
     pub fn document_uri<S: Into<Cow<'a, str>>>(mut self, document_uri: S) -> Self {
         self.insert("DOCUMENT_URI".into(), document_uri.into());
         self
     }
 
+    #[inline]
     pub fn remote_addr<S: Into<Cow<'a, str>>>(mut self, remote_addr: S) -> Self {
         self.insert("REMOTE_ADDR".into(), remote_addr.into());
         self
     }
 
+    #[inline]
     pub fn remote_port(mut self, remote_port: u16) -> Self {
         self.insert("REMOTE_PORT".into(), remote_port.to_string().into());
         self
     }
 
+    #[inline]
     pub fn server_addr<S: Into<Cow<'a, str>>>(mut self, server_addr: S) -> Self {
         self.insert("SERVER_ADDR".into(), server_addr.into());
         self
     }
 
+    #[inline]
     pub fn server_port(mut self, server_port: u16) -> Self {
         self.insert("SERVER_PORT".into(), server_port.to_string().into());
         self
     }
 
+    #[inline]
     pub fn server_name<S: Into<Cow<'a, str>>>(mut self, server_name: S) -> Self {
         self.insert("SERVER_NAME".into(), server_name.into());
         self
     }
 
+    #[inline]
     pub fn content_type<S: Into<Cow<'a, str>>>(mut self, content_type: S) -> Self {
         self.insert("CONTENT_TYPE".into(), content_type.into());
         self
     }
 
+    #[inline]
     pub fn content_length(mut self, content_length: usize) -> Self {
         self.insert("CONTENT_LENGTH".into(), content_length.to_string().into());
         self
