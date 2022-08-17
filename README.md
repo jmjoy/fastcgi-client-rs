@@ -40,28 +40,28 @@ async fn main() {
 
     // Fastcgi params, please reference to nginx-php-fpm config.
     let params = Params::default()
-        .set_request_method("GET")
-        .set_script_name(script_name)
-        .set_script_filename(script_filename)
-        .set_request_uri(script_name)
-        .set_document_uri(script_name)
-        .set_remote_addr("127.0.0.1")
-        .set_remote_port("12345")
-        .set_server_addr("127.0.0.1")
-        .set_server_port("80")
-        .set_server_name("jmjoy-pc")
-        .set_content_type("")
-        .set_content_length("0");
+        .request_method("GET")
+        .script_name(script_name)
+        .script_filename(script_filename)
+        .request_uri(script_name)
+        .document_uri(script_name)
+        .remote_addr("127.0.0.1")
+        .remote_port(12345)
+        .server_addr("127.0.0.1")
+        .server_port(80)
+        .server_name("jmjoy-pc")
+        .content_type("")
+        .content_length(0);
 
     // Fetch fastcgi server(php-fpm) response.
     let output = client.execute_once(Request::new(params, &mut io::empty())).await.unwrap();
 
     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-    let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+    let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
 
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("hello"));
-    assert_eq!(output.get_stderr(), None);
+    assert_eq!(output.stderr, None);
 }
 ```
 
@@ -86,15 +86,15 @@ async fn main() {
         let output = client.execute(Request::new(params.clone(), &mut io::empty())).await.unwrap();
 
         // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-        let stdout = String::from_utf8(output.get_stdout().unwrap()).unwrap();
+        let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
 
         assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
         assert!(stdout.contains("hello"));
-        assert_eq!(output.get_stderr(), None);
+        assert_eq!(output.stderr, None);
     }
 }
 ```
 
 ## License
 
-[MIT](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).
+[Apache-2.0](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).

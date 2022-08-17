@@ -74,24 +74,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
 
 impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     async fn inner_execute<I: AsyncRead + Unpin>(
-        &mut self, mut request: Request<'_, I>,
+        &mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
-        Self::handle_request(
-            &mut self.stream,
-            REQUEST_ID,
-            &request.params,
-            &mut request.stdin,
-        )
-        .await?;
+        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
         Self::handle_response(&mut self.stream, REQUEST_ID).await
     }
 
     async fn handle_request<'a, I: AsyncRead + Unpin>(
-        stream: &mut S, id: u16, params: &Params<'a>, body: &mut I,
+        stream: &mut S, id: u16, params: Params<'a>, mut body: I,
     ) -> ClientResult<()> {
         Self::handle_request_start(stream, id).await?;
         Self::handle_request_params(stream, id, params).await?;
-        Self::handle_request_body(stream, id, body).await?;
+        Self::handle_request_body(stream, id, &mut body).await?;
         Self::handle_request_flush(stream).await?;
         Ok(())
     }
@@ -110,7 +104,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     }
 
     async fn handle_request_params<'a>(
-        stream: &mut S, id: u16, params: &Params<'a>,
+        stream: &mut S, id: u16, params: Params<'a>,
     ) -> ClientResult<()> {
         let param_pairs = ParamPairs::new(params);
         debug!(id, ?param_pairs, "Params will be sent.");
@@ -191,11 +185,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
             match header.r#type {
                 RequestType::Stdout => {
                     let content = header.read_content_from_stream(stream).await?;
-                    response.set_stdout(content);
+                    response.stdout = Some(content);
                 }
                 RequestType::Stderr => {
                     let content = header.read_content_from_stream(stream).await?;
-                    response.set_stderr(content);
+                    response.stderr = Some(content);
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, stream).await?;

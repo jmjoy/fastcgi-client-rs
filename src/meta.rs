@@ -17,7 +17,9 @@ use crate::{
     Params,
 };
 use std::{
+    borrow::Cow,
     cmp::min,
+    collections::HashMap,
     fmt::{self, Debug, Display},
     mem::size_of,
     ops::{Deref, DerefMut},
@@ -268,12 +270,12 @@ impl ParamLength {
 pub struct ParamPair<'a> {
     name_length: ParamLength,
     value_length: ParamLength,
-    name_data: &'a str,
-    value_data: &'a str,
+    name_data: Cow<'a, str>,
+    value_data: Cow<'a, str>,
 }
 
 impl<'a> ParamPair<'a> {
-    fn new(name: &'a str, value: &'a str) -> Self {
+    fn new(name: Cow<'a, str>, value: Cow<'a, str>) -> Self {
         let name_length = ParamLength::new(name.len());
         let value_length = ParamLength::new(value.len());
         Self {
@@ -299,9 +301,10 @@ impl<'a> ParamPair<'a> {
 pub(crate) struct ParamPairs<'a>(Vec<ParamPair<'a>>);
 
 impl<'a> ParamPairs<'a> {
-    pub(crate) fn new(params: &Params<'a>) -> Self {
+    pub(crate) fn new(params: Params<'a>) -> Self {
         let mut param_pairs = Vec::new();
-        for (name, value) in params.iter() {
+        let params: HashMap<Cow<'a, str>, Cow<'a, str>> = params.into();
+        for (name, value) in params.into_iter() {
             let param_pair = ParamPair::new(name, value);
             param_pairs.push(param_pair);
         }
