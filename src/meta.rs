@@ -392,7 +392,7 @@ impl EndRequestRec {
     ) -> io::Result<Self> {
         let header = header.clone();
         let content = &*header.read_content_from_stream(reader).await?;
-        Ok(Self::new_from_buf(header, &content))
+        Ok(Self::new_from_buf(header, content))
     }
 
     pub(crate) fn new_from_buf(header: Header, buf: &[u8]) -> Self {

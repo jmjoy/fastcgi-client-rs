@@ -141,7 +141,7 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
             },
             RequestType::EndRequest => {
                 let end_request_rec =
-                    match EndRequestRec::from_header(&header, &mut self.stream).await {
+                    match EndRequestRec::from_header(header, &mut self.stream).await {
                         Ok(rec) => rec,
                         Err(err) => {
                             self.ended = true;
