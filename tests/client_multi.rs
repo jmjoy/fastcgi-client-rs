@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{request::Request, Client, Params, response::Content};
+use fastcgi_client::{request::Request, response::Content, Client, Params};
 use std::{env::current_dir, io::Cursor};
 use tokio::net::TcpStream;
 
@@ -76,12 +76,13 @@ async fn single() {
     }
 }
 
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn multi_stream() {
     common::setup();
 
-    let tasks = (0..3).map(|_| tokio::spawn(single_stream())).collect::<Vec<_>>();
+    let tasks = (0..3)
+        .map(|_| tokio::spawn(single_stream()))
+        .collect::<Vec<_>>();
     for task in tasks {
         task.await.unwrap();
     }
@@ -139,7 +140,13 @@ async fn single_stream() {
             }
         }
 
-        assert_eq!(stdout, b"Content-type: text/html; charset=UTF-8\r\n\r\n1234");
-        assert_eq!(stderr, b"PHP message: PHP Fatal error:  Uncaught Exception: TEST");
+        assert_eq!(
+            stdout,
+            b"Content-type: text/html; charset=UTF-8\r\n\r\n1234"
+        );
+        assert_eq!(
+            stderr,
+            b"PHP message: PHP Fatal error:  Uncaught Exception: TEST"
+        );
     }
 }

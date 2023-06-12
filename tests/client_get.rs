@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{conn::ShortConn, request::Request, Client, Params, response::Content};
+use fastcgi_client::{conn::ShortConn, request::Request, response::Content, Client, Params};
 use std::env::current_dir;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
@@ -117,5 +117,8 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
         }
     }
 
-    assert_eq!(stdout, b"Content-type: text/html; charset=UTF-8\r\n\r\nhello");
+    assert_eq!(
+        stdout,
+        b"Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+    );
 }
