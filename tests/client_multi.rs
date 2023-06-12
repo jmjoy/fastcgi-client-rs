@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{request::Request, Client, Params};
+use fastcgi_client::{request::Request, Client, Params, response::Content};
 use std::{env::current_dir, io::Cursor};
 use tokio::net::TcpStream;
 
@@ -73,5 +73,73 @@ async fn single() {
         let stderr = String::from_utf8(output.stderr.unwrap_or(Default::default())).unwrap();
         let stderr = dbg!(stderr);
         assert!(stderr.contains("PHP message: PHP Fatal error:  Uncaught Exception: TEST"));
+    }
+}
+
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn multi_stream() {
+    common::setup();
+
+    let tasks = (0..3).map(|_| tokio::spawn(single_stream())).collect::<Vec<_>>();
+    for task in tasks {
+        task.await.unwrap();
+    }
+}
+
+async fn single_stream() {
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    let mut client = Client::new_keep_alive(stream);
+
+    let document_root = current_dir().unwrap().join("tests").join("php");
+    let document_root = document_root.to_str().unwrap();
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("post.php");
+    let script_name = script_name.to_str().unwrap();
+
+    let body = b"p1=3&p2=4";
+
+    let params = Params::default()
+        .request_method("POST")
+        .document_root(document_root)
+        .script_name("/post.php")
+        .script_filename(script_name)
+        .request_uri("/post.php?g1=1&g2=2")
+        .query_string("g1=1&g2=2")
+        .document_uri("/post.php")
+        .remote_addr("127.0.0.1")
+        .remote_port(12345)
+        .server_addr("127.0.0.1")
+        .server_port(80)
+        .server_name("jmjoy-pc")
+        .content_type("application/x-www-form-urlencoded")
+        .content_length(body.len());
+
+    for _ in 0..3 {
+        let mut stream = client
+            .execute_stream(Request::new(params.clone(), Cursor::new(body)))
+            .await
+            .unwrap();
+
+        let mut stdout = Vec::<u8>::new();
+        let mut stderr = Vec::<u8>::new();
+
+        while let Some(content) = stream.next().await {
+            let content = content.unwrap();
+            match content {
+                Content::Stdout(out) => {
+                    stdout.extend_from_slice(out);
+                }
+                Content::Stderr(err) => {
+                    stderr.extend_from_slice(err);
+                }
+            }
+        }
+
+        assert_eq!(stdout, b"Content-type: text/html; charset=UTF-8\r\n\r\n1234");
+        assert_eq!(stderr, b"PHP message: PHP Fatal error:  Uncaught Exception: TEST");
     }
 }
