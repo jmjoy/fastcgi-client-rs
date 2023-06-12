@@ -91,11 +91,11 @@ impl Header {
         W: AsyncWrite + Unpin,
     {
         let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
-        let mut had_writen = false;
+        let mut had_written = false;
 
         loop {
             let read = content.read(&mut buf).await?;
-            if had_writen && read == 0 {
+            if had_written && read == 0 {
                 break;
             }
 
@@ -106,7 +106,7 @@ impl Header {
             }
             header.write_to_stream(writer, buf).await?;
 
-            had_writen = true;
+            had_written = true;
         }
         Ok(())
     }
@@ -147,14 +147,19 @@ impl Header {
         let mut buf: [u8; HEADER_LEN] = [0; HEADER_LEN];
         reader.read_exact(&mut buf).await?;
 
-        Ok(Self {
+        Ok(Self::new_from_buf(&buf))
+    }
+
+    #[inline]
+    pub(crate) fn new_from_buf(buf: &[u8; HEADER_LEN]) -> Self {
+        Self {
             version: buf[0],
             r#type: RequestType::from_u8(buf[1]),
-            request_id: (&buf[2..4]).read_u16().await?,
-            content_length: (&buf[4..6]).read_u16().await?,
+            request_id: be_buf_to_u16(&buf[2..4]),
+            content_length: be_buf_to_u16(&buf[4..6]),
             padding_length: buf[6],
             reserved: buf[7],
-        })
+        }
     }
 
     pub(crate) async fn read_content_from_stream<R: AsyncRead + Unpin>(
@@ -386,19 +391,26 @@ impl EndRequestRec {
         header: &Header, reader: &mut R,
     ) -> io::Result<Self> {
         let header = header.clone();
-        let mut content = &*header.read_content_from_stream(reader).await?;
-        let app_status = content.read_u32().await?;
-        let protocol_status = ProtocolStatus::from_u8(content.read_u8().await?);
-        let mut reserved: [u8; 3] = [0; 3];
-        AsyncReadExt::read_exact(&mut content, &mut reserved).await?;
+        let content = &*header.read_content_from_stream(reader).await?;
+        Ok(Self::new_from_buf(header, &content))
+    }
 
-        Ok(Self {
+    pub(crate) fn new_from_buf(header: Header, buf: &[u8]) -> Self {
+        let app_status = u32::from_be_bytes(<[u8; 4]>::try_from(&buf[0..4]).unwrap());
+        let protocol_status =
+            ProtocolStatus::from_u8(u8::from_be_bytes(<[u8; 1]>::try_from(&buf[4..5]).unwrap()));
+        let reserved = <[u8; 3]>::try_from(&buf[5..8]).unwrap();
+        Self {
             header,
             end_request: EndRequest {
                 app_status,
                 protocol_status,
                 reserved,
             },
-        })
+        }
     }
+}
+
+fn be_buf_to_u16(buf: &[u8]) -> u16 {
+    u16::from_be_bytes(<[u8; 2]>::try_from(buf).unwrap())
 }

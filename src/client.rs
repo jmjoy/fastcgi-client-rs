@@ -17,13 +17,14 @@ use crate::{
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
     request::Request,
+    response::ResponseStream,
     ClientError, ClientResult, Response,
 };
 use std::marker::PhantomData;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::debug;
 
-/// I refer to nignx fastcgi implementation, found the request id is always 1.
+/// I refer to nginx fastcgi implementation, found the request id is always 1.
 ///
 /// <https://github.com/nginx/nginx/blob/f7ea8c76b55f730daa3b63f5511feb564b44d901/src/http/modules/ngx_http_fastcgi_module.c>
 const REQUEST_ID: u16 = 1;
@@ -51,6 +52,40 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     ) -> ClientResult<Response> {
         self.inner_execute(request).await
     }
+
+    /// Send request and receive response stream from fastcgi server, under
+    /// short connection mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fastcgi_client::{response::Content, Client, Params, Request};
+    /// use tokio::{io, net::TcpStream};
+    ///
+    /// async fn stream() {
+    ///     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    ///     let client = Client::new(stream);
+    ///     let mut stream = client
+    ///         .execute_once_stream(Request::new(Params::default(), &mut io::empty()))
+    ///         .await
+    ///         .unwrap();
+    ///
+    ///     while let Some(content) = stream.next().await {
+    ///         let content = content.unwrap();
+    ///
+    ///         match content {
+    ///             Content::Stdout(out) => todo!(),
+    ///             Content::Stderr(out) => todo!(),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn execute_once_stream<'a, I: AsyncRead + Unpin>(
+        mut self, request: Request<'_, I>,
+    ) -> ClientResult<ResponseStream<S>> {
+        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
+        Ok(ResponseStream::new(self.stream, REQUEST_ID))
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
@@ -69,6 +104,43 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
         &mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
         self.inner_execute(request).await
+    }
+
+    /// Send request and receive response stream from fastcgi server, under
+    /// keep alive connection mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fastcgi_client::{response::Content, Client, Params, Request};
+    /// use tokio::{io, net::TcpStream};
+    ///
+    /// async fn stream() {
+    ///     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    ///     let mut client = Client::new_keep_alive(stream);
+    ///
+    ///     for _ in (0..3) {
+    ///         let mut stream = client
+    ///             .execute_stream(Request::new(Params::default(), &mut io::empty()))
+    ///             .await
+    ///             .unwrap();
+    ///
+    ///         while let Some(content) = stream.next().await {
+    ///             let content = content.unwrap();
+    ///
+    ///             match content {
+    ///                 Content::Stdout(out) => todo!(),
+    ///                 Content::Stderr(out) => todo!(),
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn execute_stream<I: AsyncRead + Unpin>(
+        &mut self, request: Request<'_, I>,
+    ) -> ClientResult<ResponseStream<&mut S>> {
+        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
+        Ok(ResponseStream::new(&mut self.stream, REQUEST_ID))
     }
 }
 
