@@ -142,11 +142,19 @@ async fn single_stream() {
 
         assert_eq!(
             String::from_utf8(stdout).unwrap(),
-            "Content-type: text/html; charset=UTF-8\r\n\r\n1234"
+            "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\n1234<br \
+             />\n<b>Fatal error</b>:  Uncaught Exception: TEST in \
+             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php:18\nStack \
+             trace:\n#0 {main}\n  thrown in \
+             <b>/origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php</b> on \
+             line <b>18</b><br />\n"
         );
         assert_eq!(
             String::from_utf8(stderr).unwrap(),
-            "PHP message: PHP Fatal error:  Uncaught Exception: TEST"
+            "PHP message: PHP Fatal error:  Uncaught Exception: TEST in \
+             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php:18\nStack \
+             trace:\n#0 {main}\n  thrown in \
+             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php on line 18\n"
         );
     }
 }

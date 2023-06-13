@@ -88,84 +88,90 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
             return None;
         }
 
-        if self.header.is_none() {
-            match Header::new_from_stream(&mut self.stream).await {
-                Ok(header) => {
-                    self.header = Some(header);
-                }
-                Err(err) => {
-                    self.ended = true;
-                    return Some(Err(err.into()));
-                }
-            };
-        }
-
-        let header = self.header.as_ref().unwrap();
-
-        match &header.r#type {
-            RequestType::Stdout => match self.read_step {
-                ReadStep::Content => {
-                    self.read_to_content(
-                        header.content_length as usize,
-                        Content::Stdout,
-                        Self::prepare_for_read_padding,
-                    )
-                    .await
-                }
-                ReadStep::Padding => {
-                    self.read_to_content(
-                        header.padding_length as usize,
-                        Content::Stdout,
-                        Self::prepare_for_read_header,
-                    )
-                    .await
-                }
-            },
-            RequestType::Stderr => match self.read_step {
-                ReadStep::Content => {
-                    self.read_to_content(
-                        header.content_length as usize,
-                        Content::Stderr,
-                        Self::prepare_for_read_padding,
-                    )
-                    .await
-                }
-                ReadStep::Padding => {
-                    self.read_to_content(
-                        header.padding_length as usize,
-                        Content::Stderr,
-                        Self::prepare_for_read_header,
-                    )
-                    .await
-                }
-            },
-            RequestType::EndRequest => {
-                let end_request_rec =
-                    match EndRequestRec::from_header(header, &mut self.stream).await {
-                        Ok(rec) => rec,
-                        Err(err) => {
-                            self.ended = true;
-                            return Some(Err(err.into()));
-                        }
-                    };
-                debug!(id = self.id, ?end_request_rec, "Receive from stream.");
-
-                self.ended = true;
-
-                match end_request_rec
-                    .end_request
-                    .protocol_status
-                    .convert_to_client_result(end_request_rec.end_request.app_status)
-                {
-                    Ok(_) => None,
-                    Err(err) => Some(Err(err)),
-                }
+        loop {
+            if self.header.is_none() {
+                match Header::new_from_stream(&mut self.stream).await {
+                    Ok(header) => {
+                        self.header = Some(header);
+                    }
+                    Err(err) => {
+                        self.ended = true;
+                        return Some(Err(err.into()));
+                    }
+                };
             }
-            r#type => {
-                self.ended = true;
-                Some(Err(ClientError::UnknownRequestType {
-                    request_type: r#type.clone(),
-                }))
+
+            let header = self.header.as_ref().unwrap();
+
+            match header.r#type.clone() {
+                RequestType::Stdout => match self.read_step {
+                    ReadStep::Content => {
+                        return self
+                            .read_to_content(
+                                header.content_length as usize,
+                                Content::Stdout,
+                                Self::prepare_for_read_padding,
+                            )
+                            .await;
+                    }
+                    ReadStep::Padding => {
+                        self.read_to_content(
+                            header.padding_length as usize,
+                            Content::Stdout,
+                            Self::prepare_for_read_header,
+                        )
+                        .await;
+                        continue;
+                    }
+                },
+                RequestType::Stderr => match self.read_step {
+                    ReadStep::Content => {
+                        return self
+                            .read_to_content(
+                                header.content_length as usize,
+                                Content::Stderr,
+                                Self::prepare_for_read_padding,
+                            )
+                            .await;
+                    }
+                    ReadStep::Padding => {
+                        self.read_to_content(
+                            header.padding_length as usize,
+                            Content::Stderr,
+                            Self::prepare_for_read_header,
+                        )
+                        .await;
+                        continue;
+                    }
+                },
+                RequestType::EndRequest => {
+                    let end_request_rec =
+                        match EndRequestRec::from_header(header, &mut self.stream).await {
+                            Ok(rec) => rec,
+                            Err(err) => {
+                                self.ended = true;
+                                return Some(Err(err.into()));
+                            }
+                        };
+                    debug!(id = self.id, ?end_request_rec, "Receive from stream.");
+
+                    self.ended = true;
+
+                    return match end_request_rec
+                        .end_request
+                        .protocol_status
+                        .convert_to_client_result(end_request_rec.end_request.app_status)
+                    {
+                        Ok(_) => None,
+                        Err(err) => Some(Err(err)),
+                    };
+                }
+                r#type => {
+                    self.ended = true;
+                    return Some(Err(ClientError::UnknownRequestType {
+                        request_type: r#type,
+                    }));
+                }
             }
         }
     }
@@ -188,7 +194,7 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
         };
 
         self.content_read += read;
-        if self.content_read == length {
+        if self.content_read >= length {
             self.content_read = 0;
             prepare_for_next_fn(self);
         }

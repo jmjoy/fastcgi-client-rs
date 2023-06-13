@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use fastcgi_client::{conn::ShortConn, request::Request, response::Content, Client, Params};
-use std::{env::current_dir, io::stderr};
+use std::env::current_dir;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -59,10 +59,10 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
         .await
         .unwrap();
 
-    let stdout = String::from_utf8(output.stdout.unwrap_or(Default::default())).unwrap();
-    assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-    assert!(stdout.contains("\r\n\r\n"));
-    assert!(stdout.contains("hello"));
+    assert_eq!(
+        String::from_utf8(output.stdout.unwrap_or(Default::default())).unwrap(),
+        "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\nhello"
+    );
     assert_eq!(output.stderr, None);
 }
 
@@ -119,6 +119,68 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
 
     assert_eq!(
         String::from_utf8(stdout).unwrap(),
-        "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+        "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\nhello"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_big_response_stream() {
+    common::setup();
+
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    test_client_big_response_stream(Client::new(stream)).await;
+}
+
+async fn test_client_big_response_stream<S: AsyncRead + AsyncWrite + Unpin>(
+    client: Client<S, ShortConn>,
+) {
+    let document_root = current_dir().unwrap().join("tests").join("php");
+    let document_root = document_root.to_str().unwrap();
+    let script_name = current_dir()
+        .unwrap()
+        .join("tests")
+        .join("php")
+        .join("big-response.php");
+    let script_name = script_name.to_str().unwrap();
+
+    let params = Params::default()
+        .request_method("GET")
+        .document_root(document_root)
+        .script_name("/big-response.php")
+        .script_filename(script_name)
+        .request_uri("/big-response.php")
+        .document_uri("/big-response.php")
+        .remote_addr("127.0.0.1")
+        .remote_port(12345)
+        .server_addr("127.0.0.1")
+        .server_port(80)
+        .server_name("jmjoy-pc")
+        .content_type("")
+        .content_length(0);
+
+    let mut stream = client
+        .execute_once_stream(Request::new(params, &mut io::empty()))
+        .await
+        .unwrap();
+
+    let mut stdout = Vec::<u8>::new();
+    while let Some(content) = stream.next().await {
+        let content = content.unwrap();
+        match content {
+            Content::Stdout(out) => {
+                stdout.extend_from_slice(out);
+            }
+            Content::Stderr(_) => {
+                panic!("stderr should not happened");
+            }
+        }
+    }
+
+    assert_eq!(
+        String::from_utf8(stdout).unwrap(),
+        format!(
+            "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\n{}",
+            ".".repeat(10000)
+        )
     );
 }
