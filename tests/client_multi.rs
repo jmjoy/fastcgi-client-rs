@@ -141,12 +141,12 @@ async fn single_stream() {
         }
 
         assert_eq!(
-            stdout,
-            b"Content-type: text/html; charset=UTF-8\r\n\r\n1234"
+            String::from_utf8(stdout).unwrap(),
+            "Content-type: text/html; charset=UTF-8\r\n\r\n1234"
         );
         assert_eq!(
-            stderr,
-            b"PHP message: PHP Fatal error:  Uncaught Exception: TEST"
+            String::from_utf8(stderr).unwrap(),
+            "PHP message: PHP Fatal error:  Uncaught Exception: TEST"
         );
     }
 }

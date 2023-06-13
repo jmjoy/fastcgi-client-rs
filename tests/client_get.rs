@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use fastcgi_client::{conn::ShortConn, request::Request, response::Content, Client, Params};
-use std::env::current_dir;
+use std::{env::current_dir, io::stderr};
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -118,7 +118,7 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
     }
 
     assert_eq!(
-        stdout,
-        b"Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+        String::from_utf8(stdout).unwrap(),
+        "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
     );
 }
