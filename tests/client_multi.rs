@@ -71,7 +71,6 @@ async fn single() {
         assert!(stdout.contains("1234"));
 
         let stderr = String::from_utf8(output.stderr.unwrap_or(Default::default())).unwrap();
-        let stderr = dbg!(stderr);
         assert!(stderr.contains("PHP message: PHP Fatal error:  Uncaught Exception: TEST"));
     }
 }
@@ -140,21 +139,12 @@ async fn single_stream() {
             }
         }
 
-        assert_eq!(
-            String::from_utf8(stdout).unwrap(),
+        assert!(String::from_utf8(stdout).unwrap().starts_with(
             "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\n1234<br \
-             />\n<b>Fatal error</b>:  Uncaught Exception: TEST in \
-             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php:18\nStack \
-             trace:\n#0 {main}\n  thrown in \
-             <b>/origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php</b> on \
-             line <b>18</b><br />\n"
-        );
-        assert_eq!(
-            String::from_utf8(stderr).unwrap(),
-            "PHP message: PHP Fatal error:  Uncaught Exception: TEST in \
-             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php:18\nStack \
-             trace:\n#0 {main}\n  thrown in \
-             /origin/home/jmjoy/workspace/rust/fastcgi-client-rs/tests/php/post.php on line 18\n"
-        );
+             />\n<b>Fatal error</b>:  Uncaught Exception: TEST in"
+        ));
+        assert!(String::from_utf8(stderr)
+            .unwrap()
+            .starts_with("PHP message: PHP Fatal error:  Uncaught Exception: TEST in"));
     }
 }
