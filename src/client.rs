@@ -247,6 +247,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     async fn handle_response(stream: &mut S, id: u16) -> ClientResult<Response> {
         let mut response = Response::default();
 
+        let mut stderr = Vec::new();
+        let mut stdout = Vec::new();
+
         loop {
             let header = Header::new_from_stream(stream).await?;
             if header.request_id != id {
@@ -256,12 +259,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
 
             match header.r#type {
                 RequestType::Stdout => {
-                    let content = header.read_content_from_stream(stream).await?;
-                    response.stdout = Some(content);
+                    stdout.extend(header.read_content_from_stream(stream).await?);
                 }
                 RequestType::Stderr => {
-                    let content = header.read_content_from_stream(stream).await?;
-                    response.stderr = Some(content);
+                    stderr.extend(header.read_content_from_stream(stream).await?);
                 }
                 RequestType::EndRequest => {
                     let end_request_rec = EndRequestRec::from_header(&header, stream).await?;
@@ -271,6 +272,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
                         .end_request
                         .protocol_status
                         .convert_to_client_result(end_request_rec.end_request.app_status)?;
+
+                    response.stdout = if stdout.is_empty() {
+                        None
+                    } else {
+                        Some(stdout)
+                    };
+                    response.stderr = if stderr.is_empty() {
+                        None
+                    } else {
+                        Some(stderr)
+                    };
 
                     return Ok(response);
                 }
