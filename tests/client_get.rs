@@ -19,6 +19,8 @@ use tokio::{
     net::TcpStream,
 };
 
+use futures::stream::StreamExt;
+
 mod common;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -109,7 +111,7 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
         let content = content.unwrap();
         match content {
             Content::Stdout(out) => {
-                stdout.extend_from_slice(out);
+                stdout.extend_from_slice(&out);
             }
             Content::Stderr(_) => {
                 panic!("stderr should not happened");
@@ -168,7 +170,7 @@ async fn test_client_big_response_stream<S: AsyncRead + AsyncWrite + Unpin>(
         let content = content.unwrap();
         match content {
             Content::Stdout(out) => {
-                stdout.extend_from_slice(out);
+                stdout.extend_from_slice(&out);
             }
             Content::Stderr(_) => {
                 panic!("stderr should not happened");
