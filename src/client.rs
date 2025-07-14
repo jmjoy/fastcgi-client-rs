@@ -80,7 +80,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     ///     }
     /// }
     /// ```
-    pub async fn execute_once_stream<'a, I: AsyncRead + Unpin>(
+    pub async fn execute_once_stream<I: AsyncRead + Unpin>(
         mut self, request: Request<'_, I>,
     ) -> ClientResult<ResponseStream<S>> {
         Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
