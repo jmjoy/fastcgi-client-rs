@@ -24,7 +24,7 @@ pub struct Params<'a>(HashMap<Cow<'a, str>, Cow<'a, str>>);
 
 impl<'a> Params<'a> {
     #[inline]
-    pub fn insert_custom<S: Into<Cow<'a, str>>>(mut self, key: S, value: S) -> Self {
+    pub fn custom<K: Into<Cow<'a, str>>, S: Into<Cow<'a, str>>>(mut self, key: K, value: S) -> Self {
         self.insert(k.into(), v.into());
         self
     }
