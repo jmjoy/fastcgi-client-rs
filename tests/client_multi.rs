@@ -16,6 +16,8 @@ use fastcgi_client::{request::Request, response::Content, Client, Params};
 use std::{env::current_dir, io::Cursor};
 use tokio::net::TcpStream;
 
+use futures::stream::StreamExt;
+
 mod common;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -131,10 +133,10 @@ async fn single_stream() {
             let content = content.unwrap();
             match content {
                 Content::Stdout(out) => {
-                    stdout.extend_from_slice(out);
+                    stdout.extend_from_slice(&out);
                 }
                 Content::Stderr(err) => {
-                    stderr.extend_from_slice(err);
+                    stderr.extend_from_slice(&err);
                 }
             }
         }

@@ -24,8 +24,11 @@ readme = "README.md"
 keywords = ["fastcgi", "fcgi", "client", "tokio", "php"]
 
 [dependencies]
+bytes = "1.10.1"
+futures = { version = "0.3.31", default-features = false }
 thiserror = "1.0.32"
 tokio = { version = "1.20.1", features = ["io-util", "sync", "time"] }
+tokio-util = { version = "0.7.15", features = ["io"] }
 tracing = "0.1.36"
 
 [dev-dependencies]
