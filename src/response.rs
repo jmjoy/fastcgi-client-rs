@@ -20,7 +20,7 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
-use futures::stream::Stream;
+use futures_core::stream::Stream;
 use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 use tracing::debug;
