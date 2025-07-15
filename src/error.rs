@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Error types and result type aliases for FastCGI operations.
+//!
+//! This module defines the error types that can occur during FastCGI
+//! communication and provides convenient type aliases for results.
+
 use crate::meta::{ProtocolStatus, RequestType};
 
+/// Result type alias for FastCGI client operations.
 pub type ClientResult<T> = Result<T, ClientError>;
 
+/// Error types that can occur during FastCGI communication.
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     /// Wapper of `tokio::io::Error`
@@ -24,33 +31,57 @@ pub enum ClientError {
 
     /// Usually not happen.
     #[error("Response not found of request id `{id}`")]
-    RequestIdNotFound { id: u16 },
+    RequestIdNotFound {
+        /// The request ID that was not found
+        id: u16,
+    },
 
     /// Usually not happen.
     #[error("Response not found of request id `{id}`")]
-    ResponseNotFound { id: u16 },
+    ResponseNotFound {
+        /// The request ID for which no response was found
+        id: u16,
+    },
 
     /// Maybe unimplemented request type received fom response.
     #[error("Response not found of request id `{request_type}`")]
-    UnknownRequestType { request_type: RequestType },
+    UnknownRequestType {
+        /// The unknown request type received
+        request_type: RequestType,
+    },
 
     /// Response not complete, first is protocol status and second is app
     /// status, see fastcgi protocol.
     #[error("This app can't multiplex [CantMpxConn]; AppStatus: {app_status}")]
-    EndRequestCantMpxConn { app_status: u32 },
+    EndRequestCantMpxConn {
+        /// The application status code
+        app_status: u32,
+    },
 
     /// Response not complete, first is protocol status and second is app
     /// status, see fastcgi protocol.
     #[error("New request rejected; too busy [OVERLOADED]; AppStatus: {app_status}")]
-    EndRequestOverloaded { app_status: u32 },
+    EndRequestOverloaded {
+        /// The application status code
+        app_status: u32,
+    },
 
     /// Response not complete, first is protocol status and second is app
     /// status, see fastcgi protocol.
     #[error("Role value not known [UnknownRole]; AppStatus: {app_status}")]
-    EndRequestUnknownRole { app_status: u32 },
+    EndRequestUnknownRole {
+        /// The application status code
+        app_status: u32,
+    },
 }
 
 impl ClientError {
+    /// Creates a new end request error based on the protocol status.
+    ///
+    /// # Arguments
+    ///
+    /// * `protocol_status` - The protocol status returned by the FastCGI server
+    /// * `app_status` - The application status code
     pub(crate) fn new_end_request_with_protocol_status(
         protocol_status: ProtocolStatus, app_status: u32,
     ) -> Self {
