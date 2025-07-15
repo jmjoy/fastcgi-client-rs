@@ -59,7 +59,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     /// # Examples
     ///
     /// ```
-    /// use fastcgi_client::{response::Content, Client, Params, Request};
+    /// use fastcgi_client::{response::Content, Client, Params, Request, StreamExt};
     /// use tokio::{io, net::TcpStream};
     ///
     /// async fn stream() {
@@ -80,7 +80,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     ///     }
     /// }
     /// ```
-    pub async fn execute_once_stream<'a, I: AsyncRead + Unpin>(
+    pub async fn execute_once_stream<I: AsyncRead + Unpin>(
         mut self, request: Request<'_, I>,
     ) -> ClientResult<ResponseStream<S>> {
         Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
@@ -112,7 +112,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     /// # Examples
     ///
     /// ```
-    /// use fastcgi_client::{response::Content, Client, Params, Request};
+    /// use fastcgi_client::{response::Content, Client, Params, Request, StreamExt};
     /// use tokio::{io, net::TcpStream};
     ///
     /// async fn stream() {

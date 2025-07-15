@@ -24,4 +24,7 @@ pub mod params;
 pub mod request;
 pub mod response;
 
+/// Re Export StreamExt for .next support
+pub use futures::stream::StreamExt;
+
 pub use crate::{client::Client, error::*, params::Params, request::Request, response::Response};

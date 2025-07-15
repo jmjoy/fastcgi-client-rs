@@ -1,4 +1,3 @@
-/// Connection mode, indicate is keep alive or not.
 // Copyright 2022 jmjoy
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
