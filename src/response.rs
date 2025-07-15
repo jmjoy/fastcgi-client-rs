@@ -177,10 +177,10 @@ where
             }
         }
         match self.process_message() {
-            Ok(Some(data)) => return Poll::Ready(Some(Ok(data))),
+            Ok(Some(data)) => Poll::Ready(Some(Ok(data))),
             Ok(None) if !self.eof && pending => Poll::Pending,
-            Ok(None) => return Poll::Ready(None),
-            Err(err) => return Poll::Ready(Some(Err(err))),
+            Ok(None) => Poll::Ready(None),
+            Err(err) => Poll::Ready(Some(Err(err))),
         }
     }
 }
