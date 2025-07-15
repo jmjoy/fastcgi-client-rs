@@ -19,7 +19,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use futures::stream::StreamExt;
+use futures_util::stream::StreamExt;
 
 mod common;
 

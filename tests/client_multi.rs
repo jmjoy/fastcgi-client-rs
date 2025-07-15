@@ -16,7 +16,7 @@ use fastcgi_client::{request::Request, response::Content, Client, Params};
 use std::{env::current_dir, io::Cursor};
 use tokio::net::TcpStream;
 
-use futures::stream::StreamExt;
+use futures_util::stream::StreamExt;
 
 mod common;
 
