@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! FastCGI client implementation for async communication with FastCGI servers.
+//!
+//! This module provides the main `Client` struct that handles communication
+//! with FastCGI servers in both short connection and keep-alive modes.
+//! The client can execute requests and receive responses or response streams.
+
 use crate::{
     conn::{KeepAlive, Mode, ShortConn},
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
@@ -145,6 +151,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
+    /// Internal method to execute a request and return a complete response.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The request to execute
     async fn inner_execute<I: AsyncRead + Unpin>(
         &mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
@@ -152,6 +163,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
         Self::handle_response(&mut self.stream, REQUEST_ID).await
     }
 
+    /// Handles the complete request process.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to write to
+    /// * `id` - The request ID
+    /// * `params` - The request parameters
+    /// * `body` - The request body stream
     async fn handle_request<'a, I: AsyncRead + Unpin>(
         stream: &mut S, id: u16, params: Params<'a>, mut body: I,
     ) -> ClientResult<()> {
@@ -162,6 +181,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
         Ok(())
     }
 
+    /// Handles the start of a request by sending the begin request record.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to write to
+    /// * `id` - The request ID
     async fn handle_request_start(stream: &mut S, id: u16) -> ClientResult<()> {
         debug!(id, "Start handle request");
 
@@ -175,6 +200,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
         Ok(())
     }
 
+    /// Handles sending request parameters to the stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to write to
+    /// * `id` - The request ID
+    /// * `params` - The request parameters
     async fn handle_request_params<'a>(
         stream: &mut S, id: u16, params: Params<'a>,
     ) -> ClientResult<()> {
@@ -208,6 +240,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
         Ok(())
     }
 
+    /// Handles sending the request body to the stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to write to
+    /// * `id` - The request ID
+    /// * `body` - The request body stream
     async fn handle_request_body<I: AsyncRead + Unpin>(
         stream: &mut S, id: u16, body: &mut I,
     ) -> ClientResult<()> {
@@ -238,12 +277,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
         Ok(())
     }
 
+    /// Flushes the stream to ensure all data is sent.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to flush
     async fn handle_request_flush(stream: &mut S) -> ClientResult<()> {
         stream.flush().await?;
 
         Ok(())
     }
 
+    /// Handles reading and processing the response from the stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The stream to read from
+    /// * `id` - The request ID to match
     async fn handle_response(stream: &mut S, id: u16) -> ClientResult<Response> {
         let mut response = Response::default();
 

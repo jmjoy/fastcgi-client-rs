@@ -12,32 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! FastCGI request structure and builders.
+//!
+//! This module provides the `Request` struct that encapsulates
+//! the parameters and stdin data for a FastCGI request.
+
 use crate::Params;
 use tokio::io::AsyncRead;
 
-/// fastcgi request.
+/// FastCGI request containing parameters and stdin data.
+///
+/// This structure represents a complete FastCGI request with all necessary
+/// parameters and an optional stdin stream for request body data.
 pub struct Request<'a, I: AsyncRead + Unpin> {
     pub(crate) params: Params<'a>,
     pub(crate) stdin: I,
 }
 
 impl<'a, I: AsyncRead + Unpin> Request<'a, I> {
+    /// Creates a new FastCGI request with the given parameters and stdin.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The FastCGI parameters
+    /// * `stdin` - The stdin stream for request body data
     pub fn new(params: Params<'a>, stdin: I) -> Self {
         Self { params, stdin }
     }
 
+    /// Returns a reference to the request parameters.
     pub fn params(&self) -> &Params<'a> {
         &self.params
     }
 
+    /// Returns a mutable reference to the request parameters.
     pub fn params_mut(&mut self) -> &mut Params<'a> {
         &mut self.params
     }
 
+    /// Returns a reference to the stdin stream.
     pub fn stdin(&self) -> &I {
         &self.stdin
     }
 
+    /// Returns a mutable reference to the stdin stream.
     pub fn stdin_mut(&mut self) -> &mut I {
         &mut self.stdin
     }
