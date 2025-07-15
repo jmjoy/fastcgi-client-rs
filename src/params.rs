@@ -24,6 +24,14 @@ pub struct Params<'a>(HashMap<Cow<'a, str>, Cow<'a, str>>);
 
 impl<'a> Params<'a> {
     #[inline]
+    pub fn custom<K: Into<Cow<'a, str>>, S: Into<Cow<'a, str>>>(
+        mut self, key: K, value: S,
+    ) -> Self {
+        self.insert(key.into(), value.into());
+        self
+    }
+
+    #[inline]
     pub fn gateway_interface<S: Into<Cow<'a, str>>>(mut self, gateway_interface: S) -> Self {
         self.insert("GATEWAY_INTERFACE".into(), gateway_interface.into());
         self
