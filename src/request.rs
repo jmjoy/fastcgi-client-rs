@@ -18,6 +18,10 @@
 //! the parameters and stdin data for a FastCGI request.
 
 use crate::Params;
+
+#[cfg(feature = "smol")]
+use smol::io::AsyncRead;
+#[cfg(feature = "tokio")]
 use tokio::io::AsyncRead;
 
 /// FastCGI request containing parameters and stdin data.

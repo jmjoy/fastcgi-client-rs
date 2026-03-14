@@ -14,7 +14,18 @@
 
 use fastcgi_client::{conn::ShortConn, request::Request, response::Content, Client, Params};
 use std::env::current_dir;
+
+#[cfg(feature = "tokio")]
 use tokio::{
+    io::{self, AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
+
+#[cfg(feature = "smol")]
+use macro_rules_attribute::apply;
+
+#[cfg(feature = "smol")]
+use smol::{
     io::{self, AsyncRead, AsyncWrite},
     net::TcpStream,
 };
@@ -23,7 +34,17 @@ use futures_util::stream::StreamExt;
 
 mod common;
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test() {
+    common::setup();
+
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    test_client(Client::new(stream)).await;
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test!)]
 async fn test() {
     common::setup();
 
@@ -68,7 +89,17 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
     assert_eq!(output.stderr, None);
 }
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_stream() {
+    common::setup();
+
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    test_client_stream(Client::new(stream)).await;
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test!)]
 async fn test_stream() {
     common::setup();
 
@@ -125,7 +156,17 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
     );
 }
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_big_response_stream() {
+    common::setup();
+
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    test_client_big_response_stream(Client::new(stream)).await;
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test!)]
 async fn test_big_response_stream() {
     common::setup();
 

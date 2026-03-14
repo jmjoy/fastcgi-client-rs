@@ -14,12 +14,32 @@
 
 use fastcgi_client::{request::Request, Client, Params};
 use std::{env::current_dir, time::Duration};
+
+#[cfg(feature = "smol")]
+use macro_rules_attribute::apply;
+#[cfg(feature = "smol")]
+use smol::{net::TcpStream};
+#[cfg(feature = "smol")]
+use smol_timeout::TimeoutExt;
+
+#[cfg(feature = "tokio")]
 use tokio::{net::TcpStream, time::timeout};
 
 mod common;
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn post_big_body() {
+    do_post_big_body().await;
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test)]
+async fn post_big_body() {
+    do_post_big_body().await;
+}
+
+async fn do_post_big_body() {
     common::setup();
 
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
@@ -52,6 +72,7 @@ async fn post_big_body() {
         .content_type("text/plain")
         .content_length(body.len());
 
+    #[cfg(feature = "tokio")]
     let output = timeout(
         Duration::from_secs(3),
         client.execute(Request::new(params.clone(), &mut &body[..])),
@@ -59,6 +80,14 @@ async fn post_big_body() {
     .await
     .unwrap()
     .unwrap();
+
+    #[cfg(feature = "smol")]
+    let output = client
+        .execute(Request::new(params.clone(), &mut &body[..]))
+        .timeout(Duration::from_secs(3))
+        .await
+        .unwrap()
+        .unwrap();
 
     let stdout = String::from_utf8(output.stdout.unwrap_or(Default::default())).unwrap();
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));

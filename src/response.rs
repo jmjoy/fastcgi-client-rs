@@ -26,8 +26,15 @@ use std::{
 
 use bytes::{Bytes, BytesMut};
 use futures_core::stream::Stream;
+
+#[cfg(feature = "tokio")]
 use tokio::io::AsyncRead;
+#[cfg(feature = "tokio")]
 use tokio_util::io::ReaderStream;
+
+#[cfg(feature = "smol")]
+use smol::io::{Bytes as ReaderStream, AsyncRead, AsyncReadExt};
+
 use tracing::debug;
 
 use crate::{
@@ -76,6 +83,9 @@ pub enum Content {
 ///
 /// This stream yields `Content` items as they are received from the server.
 pub struct ResponseStream<S: AsyncRead + Unpin> {
+    #[cfg(feature = "tokio")]
+    stream: ReaderStream<S>,
+    #[cfg(feature = "smol")]
     stream: ReaderStream<S>,
     id: u16,
     eof: bool,
@@ -93,7 +103,10 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
     #[inline]
     pub(crate) fn new(stream: S, id: u16) -> Self {
         Self {
+            #[cfg(feature = "tokio")]
             stream: ReaderStream::new(stream),
+            #[cfg(feature = "smol")]
+            stream: stream.bytes(),
             id,
             eof: false,
             header: None,
@@ -195,6 +208,9 @@ where
         loop {
             match Pin::new(&mut self.stream).poll_next(cx) {
                 Poll::Ready(Some(Ok(data))) => {
+                    #[cfg(feature = "smol")]
+                    self.buf.extend_from_slice(&[data]);
+                    #[cfg(feature = "tokio")]
                     self.buf.extend_from_slice(&data);
 
                     match self.process_message() {

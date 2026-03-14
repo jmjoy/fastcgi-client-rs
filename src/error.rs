@@ -26,8 +26,13 @@ pub type ClientResult<T> = Result<T, ClientError>;
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     /// Wapper of `tokio::io::Error`
+    #[cfg(feature = "tokio")]
     #[error(transparent)]
     Io(#[from] tokio::io::Error),
+
+    #[cfg(feature = "smol")]
+    #[error(transparent)]
+    Io(#[from] smol::io::Error),
 
     /// Usually not happen.
     #[error("Response not found of request id `{id}`")]

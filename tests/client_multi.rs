@@ -13,13 +13,20 @@
 // limitations under the License.
 
 use fastcgi_client::{request::Request, response::Content, Client, Params};
-use std::{env::current_dir, io::Cursor};
+use std::env::current_dir;
+
+#[cfg(feature = "smol")]
+use macro_rules_attribute::apply;
+#[cfg(feature = "tokio")]
 use tokio::net::TcpStream;
+#[cfg(feature = "smol")]
+use smol::net::TcpStream;
 
 use futures_util::stream::StreamExt;
 
 mod common;
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn multi() {
     common::setup();
@@ -27,6 +34,17 @@ async fn multi() {
     let tasks = (0..3).map(|_| tokio::spawn(single())).collect::<Vec<_>>();
     for task in tasks {
         task.await.unwrap();
+    }
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test!)]
+async fn multi() {
+    common::setup();
+
+    let tasks = (0..3).map(|_| smol::spawn(single())).collect::<Vec<_>>();
+    for task in tasks {
+        task.await;
     }
 }
 
@@ -62,8 +80,15 @@ async fn single() {
         .content_length(body.len());
 
     for _ in 0..3 {
+        #[cfg(feature = "tokio")]
         let output = client
             .execute(Request::new(params.clone(), Cursor::new(body)))
+            .await
+            .unwrap();
+            
+        #[cfg(feature = "smol")]
+        let output = client
+            .execute(Request::new(params.clone(), smol::io::Cursor::new(body)))
             .await
             .unwrap();
 
@@ -77,6 +102,7 @@ async fn single() {
     }
 }
 
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn multi_stream() {
     common::setup();
@@ -86,6 +112,19 @@ async fn multi_stream() {
         .collect::<Vec<_>>();
     for task in tasks {
         task.await.unwrap();
+    }
+}
+
+#[cfg(feature = "smol")]
+#[apply(smol_macros::test!)]
+async fn multi_stream() {
+    common::setup();
+
+    let tasks = (0..3)
+        .map(|_| smol::spawn(single_stream()))
+        .collect::<Vec<_>>();
+    for task in tasks {
+        task.await;
     }
 }
 
@@ -121,8 +160,15 @@ async fn single_stream() {
         .content_length(body.len());
 
     for _ in 0..3 {
+        #[cfg(feature = "tokio")]
         let mut stream = client
             .execute_stream(Request::new(params.clone(), Cursor::new(body)))
+            .await
+            .unwrap();
+            
+        #[cfg(feature = "smol")]
+        let mut stream = client
+            .execute_stream(Request::new(params.clone(), smol::io::Cursor::new(body)))
             .await
             .unwrap();
 

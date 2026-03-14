@@ -29,6 +29,12 @@ use std::{
     mem::size_of,
     ops::{Deref, DerefMut},
 };
+
+use bytes::BufMut;
+#[cfg(feature = "smol")]
+use smol::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+#[cfg(feature = "tokio")]
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// FastCGI protocol version 1
@@ -182,8 +188,10 @@ impl Header {
         let mut buf: Vec<u8> = Vec::new();
         buf.push(self.version);
         buf.push(self.r#type as u8);
-        buf.write_u16(self.request_id).await?;
-        buf.write_u16(self.content_length).await?;
+        buf.put_u16(self.request_id);
+        buf.put_u16(self.content_length);
+        //buf.write_u16(self.request_id).await?;
+        //buf.write_u16(self.content_length).await?;
         buf.push(self.padding_length);
         buf.push(self.reserved);
 
@@ -283,7 +291,8 @@ impl BeginRequest {
     /// Converts the begin request to bytes.
     pub(crate) async fn to_content(&self) -> io::Result<Vec<u8>> {
         let mut buf: Vec<u8> = Vec::new();
-        buf.write_u16(self.role as u16).await?;
+        buf.put_u16(self.role as u16);
+        //buf.write_u16(self.role as u16).await?;
         buf.push(self.flags);
         buf.extend_from_slice(&self.reserved);
         Ok(buf)
@@ -373,7 +382,12 @@ impl ParamLength {
         let mut buf: Vec<u8> = Vec::new();
         match self {
             ParamLength::Short(l) => buf.push(l),
-            ParamLength::Long(l) => buf.write_u32(l).await?,
+            ParamLength::Long(l) => {
+                #[cfg(feature = "smol")]
+                buf.put_u32(l);
+                #[cfg(feature = "tokio")]
+                buf.write_u32(l).await?;
+            },
         }
         Ok(buf)
     }
