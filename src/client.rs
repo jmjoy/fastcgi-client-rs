@@ -20,6 +20,7 @@
 
 use crate::{
     conn::{KeepAlive, Mode, ShortConn},
+    io::{self, AsyncRead, AsyncWrite, AsyncWriteExt},
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
     request::Request,
@@ -27,8 +28,10 @@ use crate::{
     ClientError, ClientResult, Response,
 };
 use std::marker::PhantomData;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::debug;
+
+#[cfg(feature = "runtime-tokio")]
+use crate::io::{TokioAsyncReadCompatExt, TokioCompat};
 
 /// I refer to nginx fastcgi implementation, found the request id is always 1.
 ///
@@ -41,16 +44,86 @@ pub struct Client<S, M> {
     _mode: PhantomData<M>,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
-    /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
-    /// or `tokio::net::UnixStream`, under short connection mode.
-    pub fn new(stream: S) -> Self {
+impl<S, M> Client<S, M> {
+    fn from_stream(stream: S) -> Self {
         Self {
             stream,
             _mode: PhantomData,
         }
     }
+}
 
+#[cfg(feature = "runtime-tokio")]
+impl<S> Client<TokioCompat<S>, ShortConn>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    /// Construct a `Client` Object with a Tokio stream under short connection
+    /// mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "runtime-tokio")]
+    /// # async fn example() {
+    /// use fastcgi_client::Client;
+    /// use tokio::net::TcpStream;
+    /// # #[cfg(unix)]
+    /// # use tokio::net::UnixStream;
+    ///
+    /// let tcp_stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    /// let _tcp_client = Client::new_tokio(tcp_stream);
+    ///
+    /// # #[cfg(unix)]
+    /// # {
+    /// let unix_stream = UnixStream::connect("/run/php-fpm.sock").await.unwrap();
+    /// let _unix_client = Client::new_tokio(unix_stream);
+    /// # }
+    /// # }
+    /// # #[cfg(not(feature = "runtime-tokio"))]
+    /// # fn example() {}
+    /// ```
+    pub fn new_tokio(stream: S) -> Self {
+        Self::from_stream(stream.compat())
+    }
+}
+
+#[cfg(feature = "runtime-smol")]
+impl<S> Client<S, ShortConn>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    /// Construct a `Client` Object with a Smol-compatible stream under short
+    /// connection mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "runtime-smol")]
+    /// # async fn example() {
+    /// use fastcgi_client::Client;
+    /// use smol::net::TcpStream;
+    /// # #[cfg(unix)]
+    /// # use smol::net::unix::UnixStream;
+    ///
+    /// let tcp_stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    /// let _tcp_client = Client::new_smol(tcp_stream);
+    ///
+    /// # #[cfg(unix)]
+    /// # {
+    /// let unix_stream = UnixStream::connect("/run/php-fpm.sock").await.unwrap();
+    /// let _unix_client = Client::new_smol(unix_stream);
+    /// # }
+    /// # }
+    /// # #[cfg(not(feature = "runtime-smol"))]
+    /// # fn example() {}
+    /// ```
+    pub fn new_smol(stream: S) -> Self {
+        Self::from_stream(stream)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     /// Send request and receive response from fastcgi server, under short
     /// connection mode.
     pub async fn execute_once<I: AsyncRead + Unpin>(
@@ -65,14 +138,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     /// # Examples
     ///
     /// ```
-    /// use fastcgi_client::{response::Content, Client, Params, Request, StreamExt};
-    /// use tokio::{io, net::TcpStream};
+    /// # #[cfg(feature = "runtime-tokio")]
+    /// # async fn stream() {
+    /// use fastcgi_client::{io, response::Content, Client, Params, Request, StreamExt};
+    /// use tokio::net::TcpStream;
     ///
-    /// async fn stream() {
     ///     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    ///     let client = Client::new(stream);
+    ///     let client = Client::new_tokio(stream);
     ///     let mut stream = client
-    ///         .execute_once_stream(Request::new(Params::default(), &mut io::empty()))
+    ///         .execute_once_stream(Request::new(Params::default(), io::empty()))
     ///         .await
     ///         .unwrap();
     ///
@@ -85,6 +159,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     ///         }
     ///     }
     /// }
+    /// # #[cfg(not(feature = "runtime-tokio"))]
+    /// # fn stream() {}
     /// ```
     pub async fn execute_once_stream<I: AsyncRead + Unpin>(
         mut self, request: Request<'_, I>,
@@ -94,16 +170,76 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
-    /// Construct a `Client` Object with stream, such as `tokio::net::TcpStream`
-    /// or `tokio::net::UnixStream`, under keep alive connection mode.
-    pub fn new_keep_alive(stream: S) -> Self {
-        Self {
-            stream,
-            _mode: PhantomData,
-        }
+#[cfg(feature = "runtime-tokio")]
+impl<S> Client<TokioCompat<S>, KeepAlive>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    /// Construct a `Client` Object with a Tokio stream under keep-alive mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "runtime-tokio")]
+    /// # async fn example() {
+    /// use fastcgi_client::Client;
+    /// use tokio::net::TcpStream;
+    /// # #[cfg(unix)]
+    /// # use tokio::net::UnixStream;
+    ///
+    /// let tcp_stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    /// let _tcp_client = Client::new_keep_alive_tokio(tcp_stream);
+    ///
+    /// # #[cfg(unix)]
+    /// # {
+    /// let unix_stream = UnixStream::connect("/run/php-fpm.sock").await.unwrap();
+    /// let _unix_client = Client::new_keep_alive_tokio(unix_stream);
+    /// # }
+    /// # }
+    /// # #[cfg(not(feature = "runtime-tokio"))]
+    /// # fn example() {}
+    /// ```
+    pub fn new_keep_alive_tokio(stream: S) -> Self {
+        Self::from_stream(stream.compat())
     }
+}
 
+#[cfg(feature = "runtime-smol")]
+impl<S> Client<S, KeepAlive>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    /// Construct a `Client` Object with a Smol-compatible stream under
+    /// keep-alive mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "runtime-smol")]
+    /// # async fn example() {
+    /// use fastcgi_client::Client;
+    /// use smol::net::TcpStream;
+    /// # #[cfg(unix)]
+    /// # use smol::net::unix::UnixStream;
+    ///
+    /// let tcp_stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    /// let _tcp_client = Client::new_keep_alive_smol(tcp_stream);
+    ///
+    /// # #[cfg(unix)]
+    /// # {
+    /// let unix_stream = UnixStream::connect("/run/php-fpm.sock").await.unwrap();
+    /// let _unix_client = Client::new_keep_alive_smol(unix_stream);
+    /// # }
+    /// # }
+    /// # #[cfg(not(feature = "runtime-smol"))]
+    /// # fn example() {}
+    /// ```
+    pub fn new_keep_alive_smol(stream: S) -> Self {
+        Self::from_stream(stream)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     /// Send request and receive response from fastcgi server, under keep alive
     /// connection mode.
     pub async fn execute<I: AsyncRead + Unpin>(
@@ -118,16 +254,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     /// # Examples
     ///
     /// ```
-    /// use fastcgi_client::{response::Content, Client, Params, Request, StreamExt};
-    /// use tokio::{io, net::TcpStream};
+    /// # #[cfg(feature = "runtime-tokio")]
+    /// # async fn stream() {
+    /// use fastcgi_client::{io, response::Content, Client, Params, Request, StreamExt};
+    /// use tokio::net::TcpStream;
     ///
-    /// async fn stream() {
     ///     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    ///     let mut client = Client::new_keep_alive(stream);
+    ///     let mut client = Client::new_keep_alive_tokio(stream);
     ///
     ///     for _ in (0..3) {
     ///         let mut stream = client
-    ///             .execute_stream(Request::new(Params::default(), &mut io::empty()))
+    ///             .execute_stream(Request::new(Params::default(), io::empty()))
     ///             .await
     ///             .unwrap();
     ///
@@ -141,6 +278,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     ///         }
     ///     }
     /// }
+    /// # #[cfg(not(feature = "runtime-tokio"))]
+    /// # fn stream() {}
     /// ```
     pub async fn execute_stream<I: AsyncRead + Unpin>(
         &mut self, request: Request<'_, I>,
@@ -166,7 +305,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     /// Handles the complete request process.
     ///
     /// # Arguments
-    ///
     /// * `stream` - The stream to write to
     /// * `id` - The request ID
     /// * `params` - The request parameters
@@ -229,7 +367,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
             RequestType::Params,
             id,
             stream,
-            &mut tokio::io::empty(),
+            &mut io::empty(),
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Params.");
                 header
@@ -266,7 +404,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
             RequestType::Stdin,
             id,
             stream,
-            &mut tokio::io::empty(),
+            &mut io::empty(),
             Some(|header| {
                 debug!(id, ?header, "Send to stream for Stdin.");
                 header

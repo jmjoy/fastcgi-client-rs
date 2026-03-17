@@ -17,8 +17,10 @@
 //! This module provides the `Request` struct that encapsulates
 //! the parameters and stdin data for a FastCGI request.
 
-use crate::Params;
-use tokio::io::AsyncRead;
+use crate::{io::AsyncRead, Params};
+
+#[cfg(feature = "runtime-tokio")]
+use crate::io::{TokioAsyncReadCompatExt, TokioCompat};
 
 /// FastCGI request containing parameters and stdin data.
 ///
@@ -58,5 +60,27 @@ impl<'a, I: AsyncRead + Unpin> Request<'a, I> {
     /// Returns a mutable reference to the stdin stream.
     pub fn stdin_mut(&mut self) -> &mut I {
         &mut self.stdin
+    }
+}
+
+#[cfg(feature = "runtime-tokio")]
+impl<'a, I> Request<'a, TokioCompat<I>>
+where
+    I: tokio::io::AsyncRead + Unpin,
+{
+    /// Creates a new FastCGI request from a Tokio reader.
+    pub fn new_tokio(params: Params<'a>, stdin: I) -> Self {
+        Self::new(params, stdin.compat())
+    }
+}
+
+#[cfg(feature = "runtime-smol")]
+impl<'a, I> Request<'a, I>
+where
+    I: AsyncRead + Unpin,
+{
+    /// Creates a new FastCGI request from a Smol-compatible reader.
+    pub fn new_smol(params: Params<'a>, stdin: I) -> Self {
+        Self::new(params, stdin)
     }
 }

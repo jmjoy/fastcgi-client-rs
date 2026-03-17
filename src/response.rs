@@ -21,16 +21,15 @@ use std::{
     fmt::{self, Debug},
     pin::Pin,
     str,
-    task::Poll,
+    task::{Context, Poll},
 };
 
 use bytes::{Bytes, BytesMut};
 use futures_core::stream::Stream;
-use tokio::io::AsyncRead;
-use tokio_util::io::ReaderStream;
 use tracing::debug;
 
 use crate::{
+    io::AsyncRead,
     meta::{EndRequestRec, Header, RequestType, HEADER_LEN},
     ClientError, ClientResult,
 };
@@ -76,7 +75,7 @@ pub enum Content {
 ///
 /// This stream yields `Content` items as they are received from the server.
 pub struct ResponseStream<S: AsyncRead + Unpin> {
-    stream: ReaderStream<S>,
+    stream: S,
     id: u16,
     eof: bool,
     header: Option<Header>,
@@ -93,7 +92,7 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
     #[inline]
     pub(crate) fn new(stream: S, id: u16) -> Self {
         Self {
-            stream: ReaderStream::new(stream),
+            stream,
             id,
             eof: false,
             header: None,
@@ -180,6 +179,19 @@ impl<S: AsyncRead + Unpin> ResponseStream<S> {
         }
         Ok(None)
     }
+
+    fn poll_fill_buf(&mut self, cx: &mut Context<'_>) -> Poll<ClientResult<Option<()>>> {
+        let mut chunk = [0; 8192];
+        match Pin::new(&mut self.stream).poll_read(cx, &mut chunk) {
+            Poll::Ready(Ok(0)) => Poll::Ready(Ok(None)),
+            Poll::Ready(Ok(read)) => {
+                self.buf.extend_from_slice(&chunk[..read]);
+                Poll::Ready(Ok(Some(())))
+            }
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 impl<S> Stream for ResponseStream<S>
@@ -189,23 +201,19 @@ where
     type Item = ClientResult<Content>;
 
     fn poll_next(
-        mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+        mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let mut pending = false;
         loop {
-            match Pin::new(&mut self.stream).poll_next(cx) {
-                Poll::Ready(Some(Ok(data))) => {
-                    self.buf.extend_from_slice(&data);
-
-                    match self.process_message() {
-                        Ok(Some(data)) => return Poll::Ready(Some(Ok(data))),
-                        Ok(None) if self.eof => return Poll::Ready(None),
-                        Ok(None) => continue,
-                        Err(err) => return Poll::Ready(Some(Err(err))),
-                    }
-                }
-                Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err.into()))),
-                Poll::Ready(None) => break,
+            match self.poll_fill_buf(cx) {
+                Poll::Ready(Ok(Some(()))) => match self.process_message() {
+                    Ok(Some(data)) => return Poll::Ready(Some(Ok(data))),
+                    Ok(None) if self.eof => return Poll::Ready(None),
+                    Ok(None) => continue,
+                    Err(err) => return Poll::Ready(Some(Err(err))),
+                },
+                Poll::Ready(Ok(None)) => break,
+                Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
                 Poll::Pending => {
                     pending = true;
                     break;

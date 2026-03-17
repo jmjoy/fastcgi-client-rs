@@ -14,11 +14,16 @@
 
 #![warn(rust_2018_idioms)]
 #![warn(clippy::dbg_macro, clippy::print_stdout, missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+
+#[cfg(not(any(feature = "runtime-tokio", feature = "runtime-smol")))]
+compile_error!("Enable at least one runtime feature: `runtime-tokio` or `runtime-smol`.");
 
 pub mod client;
 pub mod conn;
 mod error;
+pub mod io;
 mod meta;
 pub mod params;
 pub mod request;
