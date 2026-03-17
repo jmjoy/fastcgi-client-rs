@@ -25,9 +25,9 @@ pub type ClientResult<T> = Result<T, ClientError>;
 /// Error types that can occur during FastCGI communication.
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
-    /// Wapper of `tokio::io::Error`
+    /// Wrapper of `std::io::Error`
     #[error(transparent)]
-    Io(#[from] tokio::io::Error),
+    Io(#[from] std::io::Error),
 
     /// Usually not happen.
     #[error("Response not found of request id `{id}`")]

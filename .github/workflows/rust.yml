@@ -26,7 +26,7 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  rust:
+  fmt:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -37,15 +37,47 @@ jobs:
       run: rustup update
     - name: Setup nightly
       run: rustup toolchain install nightly --component rustfmt --allow-downgrade
-    - name: Run php-fpm
-      run: docker run -d --name php-fpm -v $PWD:$PWD -p 9000:9000 php:7.1.30-fpm -c /usr/local/etc/php/php.ini-development
     - name: Fmt
       run: cargo +nightly fmt --all -- --check
-    - name: Check
-      run: cargo check --release
+
+  rust:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: tokio
+          features: runtime-tokio
+        - name: smol
+          features: runtime-smol
+        - name: all
+          features: runtime-tokio,runtime-smol
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Update rust
+      run: rustup update
+    - name: Run php-fpm
+      run: docker run -d --name php-fpm -v $PWD:$PWD -p 9000:9000 php:7.1.30-fpm -c /usr/local/etc/php/php.ini-development
+    - name: Check (${{ matrix.name }})
+      run: cargo check --release --no-default-features --features ${{ matrix.features }}
     - name: Clippy
-      run: cargo clippy --release
-    - name: Test
-      run: cargo test --release
+      run: cargo clippy --release --no-default-features --features ${{ matrix.features }}
+    - name: Test (${{ matrix.name }})
+      run: cargo test --release --no-default-features --features ${{ matrix.features }}
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Update rust
+      run: rustup update
+    - name: Setup nightly
+      run: rustup toolchain install nightly --allow-downgrade
     - name: Doc
-      run: cargo rustdoc --release
+      run: cargo +nightly rustdoc --release --all-features -- -D warnings --cfg docsrs

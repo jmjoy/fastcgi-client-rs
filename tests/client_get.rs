@@ -12,23 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{conn::ShortConn, request::Request, response::Content, Client, Params};
-use std::env::current_dir;
-use tokio::{
+use fastcgi_client::{
+    conn::ShortConn,
     io::{self, AsyncRead, AsyncWrite},
-    net::TcpStream,
+    request::Request,
+    response::Content,
+    Client, Params,
 };
+use std::env::current_dir;
 
 use futures_util::stream::StreamExt;
 
 mod common;
 
+#[cfg(feature = "runtime-tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test() {
+async fn test_tokio() {
     common::setup();
 
+    use tokio::net::TcpStream;
+
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    test_client(Client::new(stream)).await;
+    test_client(Client::new_tokio(stream)).await;
+}
+
+#[cfg(feature = "runtime-smol")]
+#[test]
+fn test_smol() {
+    common::setup();
+
+    smol::block_on(async {
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        test_client(Client::new_smol(stream)).await;
+    });
 }
 
 async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortConn>) {
@@ -57,7 +75,7 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
         .content_length(0);
 
     let output = client
-        .execute_once(Request::new(params, &mut io::empty()))
+        .execute_once(Request::new(params, io::empty()))
         .await
         .unwrap();
 
@@ -68,12 +86,28 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
     assert_eq!(output.stderr, None);
 }
 
+#[cfg(feature = "runtime-tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_stream() {
+async fn test_stream_tokio() {
     common::setup();
 
+    use tokio::net::TcpStream;
+
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    test_client_stream(Client::new(stream)).await;
+    test_client_stream(Client::new_tokio(stream)).await;
+}
+
+#[cfg(feature = "runtime-smol")]
+#[test]
+fn test_stream_smol() {
+    common::setup();
+
+    smol::block_on(async {
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        test_client_stream(Client::new_smol(stream)).await;
+    });
 }
 
 async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortConn>) {
@@ -102,7 +136,7 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
         .content_length(0);
 
     let mut stream = client
-        .execute_once_stream(Request::new(params, &mut io::empty()))
+        .execute_once_stream(Request::new(params, io::empty()))
         .await
         .unwrap();
 
@@ -125,12 +159,28 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
     );
 }
 
+#[cfg(feature = "runtime-tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_big_response_stream() {
+async fn test_big_response_stream_tokio() {
     common::setup();
 
+    use tokio::net::TcpStream;
+
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    test_client_big_response_stream(Client::new(stream)).await;
+    test_client_big_response_stream(Client::new_tokio(stream)).await;
+}
+
+#[cfg(feature = "runtime-smol")]
+#[test]
+fn test_big_response_stream_smol() {
+    common::setup();
+
+    smol::block_on(async {
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        test_client_big_response_stream(Client::new_smol(stream)).await;
+    });
 }
 
 async fn test_client_big_response_stream<S: AsyncRead + AsyncWrite + Unpin>(
@@ -161,7 +211,7 @@ async fn test_client_big_response_stream<S: AsyncRead + AsyncWrite + Unpin>(
         .content_length(0);
 
     let mut stream = client
-        .execute_once_stream(Request::new(params, &mut io::empty()))
+        .execute_once_stream(Request::new(params, io::empty()))
         .await
         .unwrap();
 

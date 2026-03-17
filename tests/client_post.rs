@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{request::Request, Client, Params};
+use fastcgi_client::{io, request::Request, Client, Params};
 use std::{env::current_dir, time::Duration};
-use tokio::{net::TcpStream, time::timeout};
 
 mod common;
 
+#[cfg(feature = "runtime-tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn post_big_body() {
+async fn post_big_body_tokio() {
     common::setup();
 
+    use tokio::{net::TcpStream, time::timeout};
+
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new_keep_alive(stream);
+    let mut client = Client::new_keep_alive_tokio(stream);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
@@ -54,7 +56,7 @@ async fn post_big_body() {
 
     let output = timeout(
         Duration::from_secs(3),
-        client.execute(Request::new(params.clone(), &mut &body[..])),
+        client.execute(Request::new(params.clone(), io::Cursor::new(body))),
     )
     .await
     .unwrap()
@@ -64,4 +66,54 @@ async fn post_big_body() {
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("\r\n\r\n"));
     assert!(stdout.contains("131072"));
+}
+
+#[cfg(feature = "runtime-smol")]
+#[test]
+fn post_big_body_smol() {
+    common::setup();
+
+    smol::block_on(async {
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        let mut client = Client::new_keep_alive_smol(stream);
+
+        let document_root = current_dir().unwrap().join("tests").join("php");
+        let document_root = document_root.to_str().unwrap();
+        let script_name = current_dir()
+            .unwrap()
+            .join("tests")
+            .join("php")
+            .join("body-size.php");
+        let script_name = script_name.to_str().unwrap();
+
+        let body = [0u8; 131072];
+
+        let params = Params::default()
+            .request_method("POST")
+            .document_root(document_root)
+            .script_name("/body-size.php")
+            .script_filename(script_name)
+            .request_uri("/body-size.php")
+            .query_string("")
+            .document_uri("/body-size.php")
+            .remote_addr("127.0.0.1")
+            .remote_port(12345)
+            .server_addr("127.0.0.1")
+            .server_port(80)
+            .server_name("jmjoy-pc")
+            .content_type("text/plain")
+            .content_length(body.len());
+
+        let output = client
+            .execute(Request::new(params, io::Cursor::new(body)))
+            .await
+            .unwrap();
+
+        let stdout = String::from_utf8(output.stdout.unwrap_or(Default::default())).unwrap();
+        assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+        assert!(stdout.contains("\r\n\r\n"));
+        assert!(stdout.contains("131072"));
+    });
 }

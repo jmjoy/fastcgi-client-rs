@@ -19,6 +19,7 @@
 
 use crate::{
     error::{ClientError, ClientResult},
+    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     Params,
 };
 use std::{
@@ -29,7 +30,6 @@ use std::{
     mem::size_of,
     ops::{Deref, DerefMut},
 };
-use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// FastCGI protocol version 1
 pub(crate) const VERSION_1: u8 = 1;
@@ -179,19 +179,21 @@ impl Header {
     async fn write_to_stream<W: AsyncWrite + Unpin>(
         self, writer: &mut W, content: &[u8],
     ) -> io::Result<()> {
-        let mut buf: Vec<u8> = Vec::new();
+        let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LEN);
         buf.push(self.version);
         buf.push(self.r#type as u8);
-        buf.write_u16(self.request_id).await?;
-        buf.write_u16(self.content_length).await?;
+        buf.extend_from_slice(&self.request_id.to_be_bytes());
+        buf.extend_from_slice(&self.content_length.to_be_bytes());
         buf.push(self.padding_length);
         buf.push(self.reserved);
 
         writer.write_all(&buf).await?;
         writer.write_all(content).await?;
-        writer
-            .write_all(&vec![0; self.padding_length as usize])
-            .await?;
+        if self.padding_length != 0 {
+            writer
+                .write_all(&vec![0; self.padding_length as usize])
+                .await?;
+        }
 
         Ok(())
     }
@@ -282,8 +284,8 @@ impl BeginRequest {
 
     /// Converts the begin request to bytes.
     pub(crate) async fn to_content(&self) -> io::Result<Vec<u8>> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.write_u16(self.role as u16).await?;
+        let mut buf: Vec<u8> = Vec::with_capacity(8);
+        buf.extend_from_slice(&(self.role as u16).to_be_bytes());
         buf.push(self.flags);
         buf.extend_from_slice(&self.reserved);
         Ok(buf)
@@ -370,11 +372,10 @@ impl ParamLength {
 
     /// Converts the parameter length to bytes.
     pub async fn content(self) -> io::Result<Vec<u8>> {
-        let mut buf: Vec<u8> = Vec::new();
-        match self {
-            ParamLength::Short(l) => buf.push(l),
-            ParamLength::Long(l) => buf.write_u32(l).await?,
-        }
+        let buf = match self {
+            ParamLength::Short(l) => vec![l],
+            ParamLength::Long(l) => l.to_be_bytes().to_vec(),
+        };
         Ok(buf)
     }
 }

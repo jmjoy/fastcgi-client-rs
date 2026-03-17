@@ -13,16 +13,19 @@
 // limitations under the License.
 
 #![feature(test)]
+#![cfg(feature = "runtime-tokio")]
 
 extern crate test;
 
-use fastcgi_client::{conn::KeepAlive, request::Request, Client, Params};
+use fastcgi_client::{
+    conn::KeepAlive,
+    io::{self, AsyncRead, AsyncWrite},
+    request::Request,
+    Client, Params,
+};
 use std::env::current_dir;
 use test::Bencher;
-use tokio::{
-    io::{self, AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::net::TcpStream;
 
 mod common;
 
@@ -52,7 +55,7 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: &mut Client<S, K
         .content_length(0);
 
     let output = client
-        .execute(Request::new(params, &mut io::empty()))
+        .execute(Request::new(params, io::empty()))
         .await
         .unwrap();
 
@@ -75,7 +78,7 @@ fn bench_execute(b: &mut Bencher) {
 
     let mut client = rt.block_on(async {
         let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-        Client::new_keep_alive(stream)
+        Client::new_keep_alive_tokio(stream)
     });
 
     b.iter(|| {
