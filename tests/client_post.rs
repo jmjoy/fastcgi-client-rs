@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use fastcgi_client::{io, request::Request, Client, Params};
-use std::{env::current_dir, time::Duration};
+use std::env::current_dir;
 
 mod common;
 
@@ -36,7 +36,7 @@ async fn post_big_body_tokio() {
         .join("body-size.php");
     let script_name = script_name.to_str().unwrap();
 
-    let body = [0u8; 131072];
+    let body = vec![0u8; 131072];
 
     let params = Params::default()
         .request_method("POST")
@@ -55,7 +55,7 @@ async fn post_big_body_tokio() {
         .content_length(body.len());
 
     let output = timeout(
-        Duration::from_secs(3),
+        std::time::Duration::from_secs(3),
         client.execute(Request::new(params.clone(), io::Cursor::new(body))),
     )
     .await
@@ -88,7 +88,7 @@ fn post_big_body_smol() {
             .join("body-size.php");
         let script_name = script_name.to_str().unwrap();
 
-        let body = [0u8; 131072];
+        let body = vec![0u8; 131072];
 
         let params = Params::default()
             .request_method("POST")

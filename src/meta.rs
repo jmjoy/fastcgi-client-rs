@@ -130,7 +130,7 @@ impl Header {
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        let mut buf: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
+        let mut buf = vec![0; MAX_LENGTH];
         let mut had_written = false;
 
         loop {
