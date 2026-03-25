@@ -22,6 +22,10 @@ use crate::meta::{ProtocolStatus, RequestType};
 /// Result type alias for FastCGI client operations.
 pub type ClientResult<T> = Result<T, ClientError>;
 
+/// Result type alias for HTTP/FastCGI conversion operations.
+#[cfg(feature = "http")]
+pub type HttpConversionResult<T> = Result<T, HttpConversionError>;
+
 /// Error types that can occur during FastCGI communication.
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -72,6 +76,49 @@ pub enum ClientError {
     EndRequestUnknownRole {
         /// The application status code
         app_status: u32,
+    },
+}
+
+/// Error types that can occur while converting between FastCGI and HTTP types.
+#[cfg(feature = "http")]
+#[derive(Debug, thiserror::Error)]
+pub enum HttpConversionError {
+    /// Required FastCGI param is missing during HTTP conversion.
+    #[error("Missing FastCGI param `{name}`")]
+    MissingFastcgiParam {
+        /// The missing FastCGI param name.
+        name: &'static str,
+    },
+
+    /// Invalid HTTP method during conversion.
+    #[error(transparent)]
+    InvalidHttpMethod(#[from] ::http::method::InvalidMethod),
+
+    /// Invalid HTTP URI during conversion.
+    #[error(transparent)]
+    InvalidHttpUri(#[from] ::http::uri::InvalidUri),
+
+    /// Invalid HTTP header name during conversion.
+    #[error(transparent)]
+    InvalidHttpHeaderName(#[from] ::http::header::InvalidHeaderName),
+
+    /// Invalid HTTP header value during conversion.
+    #[error(transparent)]
+    InvalidHttpHeaderValue(#[from] ::http::header::InvalidHeaderValue),
+
+    /// Invalid HTTP status code during conversion.
+    #[error(transparent)]
+    InvalidHttpStatusCode(#[from] ::http::status::InvalidStatusCode),
+
+    /// Invalid HTTP message constructed by builder.
+    #[error(transparent)]
+    InvalidHttpMessage(#[from] ::http::Error),
+
+    /// CGI response payload could not be parsed into headers and body.
+    #[error("Malformed CGI response: {message}")]
+    MalformedHttpResponse {
+        /// Human-readable parse failure reason.
+        message: &'static str,
     },
 }
 

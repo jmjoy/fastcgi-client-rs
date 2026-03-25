@@ -17,7 +17,13 @@
 //! This module provides the `Request` struct that encapsulates
 //! the parameters and stdin data for a FastCGI request.
 
+#[cfg(feature = "http")]
+use std::{borrow::Cow, collections::HashMap};
+
 use crate::{Params, io::AsyncRead};
+
+#[cfg(feature = "http")]
+use crate::{HttpConversionError, HttpConversionResult};
 
 #[cfg(feature = "runtime-tokio")]
 use crate::io::{TokioAsyncReadCompatExt, TokioCompat};
@@ -61,6 +67,54 @@ impl<'a, I: AsyncRead + Unpin> Request<'a, I> {
     pub fn stdin_mut(&mut self) -> &mut I {
         &mut self.stdin
     }
+
+    /// Converts a FastCGI request into an `http::Request` without buffering the
+    /// body.
+    #[cfg(feature = "http")]
+    pub fn try_into_http(self) -> HttpConversionResult<::http::Request<I>> {
+        self.try_into()
+    }
+}
+
+#[cfg(feature = "http")]
+impl<I> Request<'static, I>
+where
+    I: AsyncRead + Unpin,
+{
+    /// Builds a FastCGI request from an `http::Request`, merging
+    /// caller-provided FastCGI extras such as `SCRIPT_FILENAME`.
+    pub fn try_from_http_with<'a>(
+        request: ::http::Request<I>, extras: Params<'a>,
+    ) -> HttpConversionResult<Self> {
+        let (parts, body) = request.into_parts();
+        let mut params: Params<'static> = parts.try_into()?;
+        for (name, value) in HashMap::<Cow<'a, str>, Cow<'a, str>>::from(extras) {
+            params.insert(
+                Cow::Owned(name.into_owned()),
+                Cow::Owned(value.into_owned()),
+            );
+        }
+        Ok(Request::new(params, body))
+    }
+
+    /// Builds a FastCGI request from an `http::Request` using only
+    /// HTTP-representable metadata.
+    pub fn try_from_http(request: ::http::Request<I>) -> HttpConversionResult<Self> {
+        Self::try_from_http_with(request, Params::default())
+    }
+}
+
+#[cfg(feature = "http")]
+impl<'a, I> TryFrom<Request<'a, I>> for ::http::Request<I>
+where
+    I: AsyncRead + Unpin,
+{
+    type Error = HttpConversionError;
+
+    fn try_from(request: Request<'a, I>) -> Result<Self, Self::Error> {
+        let (parts, body) = ((&request.params).try_into()?, request.stdin);
+        Ok(::http::Request::from_parts(parts, body))
+    }
 }
 
 #[cfg(feature = "runtime-tokio")]
@@ -82,5 +136,43 @@ where
     /// Creates a new FastCGI request from a Smol-compatible reader.
     pub fn new_smol(params: Params<'a>, stdin: I) -> Self {
         Self::new(params, stdin)
+    }
+}
+
+#[cfg(all(test, feature = "http"))]
+mod http_tests {
+    use crate::{Params, Request, io};
+
+    #[test]
+    fn request_from_http_with_extras() {
+        let request = ::http::Request::builder()
+            .method(::http::Method::POST)
+            .uri("/submit?foo=bar")
+            .header(::http::header::HOST, "example.com")
+            .body(io::Cursor::new(b"body".to_vec()))
+            .unwrap();
+
+        let extras = Params::default()
+            .script_filename("/srv/www/index.php")
+            .script_name("/index.php");
+        let request = Request::try_from_http_with(request, extras).unwrap();
+
+        assert_eq!(request.params()["REQUEST_METHOD"], "POST");
+        assert_eq!(request.params()["QUERY_STRING"], "foo=bar");
+        assert_eq!(request.params()["HTTP_HOST"], "example.com");
+        assert_eq!(request.params()["SCRIPT_FILENAME"], "/srv/www/index.php");
+    }
+
+    #[test]
+    fn request_into_http_preserves_stream_body() {
+        let params = Params::default()
+            .request_method("GET")
+            .request_uri("/index.php");
+        let request = Request::new(params, io::empty());
+
+        let http_request = request.try_into_http().unwrap();
+
+        assert_eq!(http_request.method(), ::http::Method::GET);
+        assert_eq!(http_request.uri(), "/index.php");
     }
 }
