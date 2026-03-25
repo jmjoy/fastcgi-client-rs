@@ -29,9 +29,9 @@ use futures_core::stream::Stream;
 use tracing::debug;
 
 use crate::{
-    io::AsyncRead,
-    meta::{EndRequestRec, Header, RequestType, HEADER_LEN},
     ClientError, ClientResult,
+    io::AsyncRead,
+    meta::{EndRequestRec, HEADER_LEN, Header, RequestType},
 };
 
 /// Output of FastCGI request, contains STDOUT and STDERR data.

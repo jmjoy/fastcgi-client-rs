@@ -17,7 +17,7 @@
 //! This module provides the `Request` struct that encapsulates
 //! the parameters and stdin data for a FastCGI request.
 
-use crate::{io::AsyncRead, Params};
+use crate::{Params, io::AsyncRead};
 
 #[cfg(feature = "runtime-tokio")]
 use crate::io::{TokioAsyncReadCompatExt, TokioCompat};

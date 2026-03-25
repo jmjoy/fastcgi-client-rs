@@ -17,7 +17,7 @@
 pub use std::io::{Error, ErrorKind, Result};
 
 pub use futures_io::{AsyncRead, AsyncWrite};
-pub use futures_util::io::{empty, AsyncReadExt, AsyncWriteExt, Cursor, Empty};
+pub use futures_util::io::{AsyncReadExt, AsyncWriteExt, Cursor, Empty, empty};
 
 #[cfg(feature = "runtime-tokio")]
 pub use tokio_util::compat::{

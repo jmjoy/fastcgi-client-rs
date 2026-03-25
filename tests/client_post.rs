@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{io, request::Request, Client, Params};
+use fastcgi_client::{Client, Params, io, request::Request};
 use std::env::current_dir;
 
 mod common;
