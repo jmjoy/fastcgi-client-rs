@@ -189,6 +189,23 @@ use smol::net::TcpStream;
 # fn example() {}
 ```
 
+## Optional HTTP conversions
+
+Enable the `http` feature if you want to convert between this crate's FastCGI
+types and the `http` crate.
+
+```toml
+fastcgi-client = { version = "0.10", features = ["http", "runtime-tokio"] }
+```
+
+The conversion boundary is intentionally split in two:
+
+- `Request<'a, I>` can convert into `http::Request<I>` without buffering the body.
+- `http::Request<I>` can convert back into FastCGI metadata, but CGI-only params
+    such as `SCRIPT_FILENAME` must be supplied explicitly through extra `Params`.
+- `Response` can be parsed into `http::Response<Vec<u8>>`; `stderr` remains
+    available only on the original FastCGI response.
+
 ## License
 
 [Apache-2.0](https://github.com/jmjoy/fastcgi-client-rs/blob/master/LICENSE).

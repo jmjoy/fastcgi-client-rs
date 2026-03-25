@@ -24,6 +24,9 @@ use std::{
     task::{Context, Poll},
 };
 
+#[cfg(feature = "http")]
+use std::str::FromStr;
+
 use bytes::{Bytes, BytesMut};
 use futures_core::stream::Stream;
 use tracing::debug;
@@ -33,6 +36,9 @@ use crate::{
     io::AsyncRead,
     meta::{EndRequestRec, HEADER_LEN, Header, RequestType},
 };
+
+#[cfg(feature = "http")]
+use crate::{HttpConversionError, HttpConversionResult};
 
 /// Output of FastCGI request, contains STDOUT and STDERR data.
 ///
@@ -53,6 +59,80 @@ impl Debug for Response {
             .field("stdout", &self.stdout.as_deref().map(str::from_utf8))
             .field("stderr", &self.stderr.as_deref().map(str::from_utf8))
             .finish()
+    }
+}
+
+#[cfg(feature = "http")]
+impl<B> TryFrom<::http::Response<B>> for Response
+where
+    B: AsRef<[u8]>,
+{
+    type Error = HttpConversionError;
+
+    fn try_from(response: ::http::Response<B>) -> Result<Self, Self::Error> {
+        let (parts, body) = response.into_parts();
+        let mut stdout = Vec::new();
+
+        if parts.status != ::http::StatusCode::OK {
+            stdout.extend_from_slice(format!("Status: {}\r\n", parts.status).as_bytes());
+        }
+
+        for (name, value) in &parts.headers {
+            stdout.extend_from_slice(name.as_str().as_bytes());
+            stdout.extend_from_slice(b": ");
+            stdout.extend_from_slice(value.as_bytes());
+            stdout.extend_from_slice(b"\r\n");
+        }
+
+        stdout.extend_from_slice(b"\r\n");
+        stdout.extend_from_slice(body.as_ref());
+
+        Ok(Response {
+            stdout: Some(stdout),
+            stderr: None,
+        })
+    }
+}
+
+#[cfg(feature = "http")]
+impl TryFrom<Response> for ::http::Response<Vec<u8>> {
+    type Error = HttpConversionError;
+
+    fn try_from(response: Response) -> Result<Self, Self::Error> {
+        let stdout = response.stdout.unwrap_or_default();
+        let (header_bytes, body_bytes) = split_header_body(&stdout)?;
+        let mut status = ::http::StatusCode::OK;
+        let mut builder = ::http::Response::builder();
+
+        {
+            let headers = builder
+                .headers_mut()
+                .expect("response builder should provide headers");
+            for line in header_bytes.split(|byte| *byte == b'\n') {
+                let line = trim_cr(line);
+                if line.is_empty() {
+                    continue;
+                }
+                let Some((name, value)) = line.split_first_colon() else {
+                    return Err(HttpConversionError::MalformedHttpResponse {
+                        message: "response header line is missing ':'",
+                    });
+                };
+
+                if name.eq_ignore_ascii_case(b"Status") {
+                    status = parse_status_header(value)?;
+                    continue;
+                }
+
+                headers.append(
+                    ::http::header::HeaderName::from_bytes(name)?,
+                    ::http::header::HeaderValue::from_bytes(trim_start_ascii(value))?,
+                );
+            }
+        }
+
+        builder = builder.status(status);
+        Ok(builder.body(body_bytes.to_vec())?)
     }
 }
 
@@ -226,5 +306,94 @@ where
             Ok(None) => Poll::Ready(None),
             Err(err) => Poll::Ready(Some(Err(err))),
         }
+    }
+}
+
+#[cfg(feature = "http")]
+fn split_header_body(stdout: &[u8]) -> HttpConversionResult<(&[u8], &[u8])> {
+    if let Some(offset) = stdout.windows(4).position(|window| window == b"\r\n\r\n") {
+        return Ok((&stdout[..offset], &stdout[offset + 4..]));
+    }
+    if let Some(offset) = stdout.windows(2).position(|window| window == b"\n\n") {
+        return Ok((&stdout[..offset], &stdout[offset + 2..]));
+    }
+    Err(HttpConversionError::MalformedHttpResponse {
+        message: "response does not contain a header/body separator",
+    })
+}
+
+#[cfg(feature = "http")]
+fn parse_status_header(value: &[u8]) -> HttpConversionResult<::http::StatusCode> {
+    let value = str::from_utf8(trim_start_ascii(value)).map_err(|_| {
+        HttpConversionError::MalformedHttpResponse {
+            message: "status header is not valid UTF-8",
+        }
+    })?;
+    let Some(code) = value.split_whitespace().next() else {
+        return Err(HttpConversionError::MalformedHttpResponse {
+            message: "status header is empty",
+        });
+    };
+    Ok(::http::StatusCode::from_str(code)?)
+}
+
+#[cfg(feature = "http")]
+fn trim_cr(line: &[u8]) -> &[u8] {
+    line.strip_suffix(b"\r").unwrap_or(line)
+}
+
+#[cfg(feature = "http")]
+fn trim_start_ascii(bytes: &[u8]) -> &[u8] {
+    let index = bytes
+        .iter()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    &bytes[index..]
+}
+
+#[cfg(feature = "http")]
+trait SplitFirstColon {
+    fn split_first_colon(&self) -> Option<(&[u8], &[u8])>;
+}
+
+#[cfg(feature = "http")]
+impl SplitFirstColon for [u8] {
+    fn split_first_colon(&self) -> Option<(&[u8], &[u8])> {
+        let offset = self.iter().position(|byte| *byte == b':')?;
+        Some((&self[..offset], &self[offset + 1..]))
+    }
+}
+
+#[cfg(all(test, feature = "http"))]
+mod http_tests {
+    use crate::Response;
+
+    #[test]
+    fn response_into_http_defaults_status_to_ok() {
+        let response = Response {
+            stdout: Some(b"Content-type: text/plain\r\nX-Test: 1\r\n\r\nhello".to_vec()),
+            stderr: Some(b"notice".to_vec()),
+        };
+
+        let response: ::http::Response<Vec<u8>> = response.try_into().unwrap();
+
+        assert_eq!(response.status(), ::http::StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "text/plain");
+        assert_eq!(response.body(), b"hello");
+    }
+
+    #[test]
+    fn response_from_http_serializes_status_and_headers() {
+        let response = ::http::Response::builder()
+            .status(::http::StatusCode::CREATED)
+            .header(::http::header::CONTENT_TYPE, "text/plain")
+            .body(b"hello".to_vec())
+            .unwrap();
+
+        let response = Response::try_from(response).unwrap();
+        let stdout = String::from_utf8(response.stdout.unwrap()).unwrap();
+
+        assert!(stdout.starts_with("Status: 201 Created\r\n"));
+        assert!(stdout.contains("content-type: text/plain\r\n\r\nhello"));
     }
 }
