@@ -62,14 +62,14 @@ From the repository root, run the examples as follows:
    cargo run --example smol_keep_alive --features runtime-smol
    ```
 
-6. `axum_proxy`
+6. `axum_proxy_server`
 
    This example starts an Axum server on `127.0.0.1:3000`, converts incoming HTTP requests into FastCGI requests, forwards them to php-fpm, and converts the FastCGI response back into an HTTP response. The route `/` maps to `tests/php/index.php`; other request paths map to PHP files under `tests/php`. Non-existent scripts and obvious path traversal attempts return `404` before contacting php-fpm. The script `tests/php/post.php` intentionally throws an exception, so this example may print FastCGI stderr to stderr while still returning the HTTP response body.
 
    Run it with:
 
    ```shell
-   cargo run --example axum_proxy --features http,runtime-tokio
+   cargo run --example axum_proxy_server --features http,runtime-tokio
    ```
 
    Example manual checks:

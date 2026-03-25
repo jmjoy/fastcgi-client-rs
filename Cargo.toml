@@ -72,5 +72,5 @@ name = "smol_keep_alive"
 required-features = ["runtime-smol"]
 
 [[example]]
-name = "axum_proxy"
+name = "axum_proxy_server"
 required-features = ["http", "runtime-tokio"]
