@@ -51,7 +51,7 @@ jobs:
         - name: smol
           features: runtime-smol
         - name: all
-          features: runtime-tokio,runtime-smol
+          features: runtime-tokio,runtime-smol,http
     steps:
     - name: Checkout
       uses: actions/checkout@v2
