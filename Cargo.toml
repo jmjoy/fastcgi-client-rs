@@ -46,6 +46,31 @@ tokio-util = { version = "0.7.18", features = ["compat"], optional = true }
 tracing = "0.1.44"
 
 [dev-dependencies]
+axum = "0.8.4"
 smol = "2.0.2"
 tokio = { version = "1.50.0", features = ["full"] }
 tracing-subscriber = "0.3.23"
+
+[[example]]
+name = "tokio_short_connection"
+required-features = ["runtime-tokio"]
+
+[[example]]
+name = "tokio_keep_alive"
+required-features = ["runtime-tokio"]
+
+[[example]]
+name = "tokio_stream_response"
+required-features = ["runtime-tokio"]
+
+[[example]]
+name = "smol_short_connection"
+required-features = ["runtime-smol"]
+
+[[example]]
+name = "smol_keep_alive"
+required-features = ["runtime-smol"]
+
+[[example]]
+name = "axum_proxy_server"
+required-features = ["http", "runtime-tokio"]
