@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use fastcgi_client::{io::Cursor, request::Request, response::Content, Client, Params};
+use fastcgi_client::{Client, Params, io::Cursor, request::Request, response::Content};
 use std::env::current_dir;
 
 use futures_util::stream::StreamExt;
@@ -232,9 +232,11 @@ async fn single_stream() {
             "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\n1234<br \
              />\n<b>Fatal error</b>:  Uncaught Exception: TEST in"
         ));
-        assert!(String::from_utf8(stderr)
-            .unwrap()
-            .starts_with("PHP message: PHP Fatal error:  Uncaught Exception: TEST in"));
+        assert!(
+            String::from_utf8(stderr)
+                .unwrap()
+                .starts_with("PHP message: PHP Fatal error:  Uncaught Exception: TEST in")
+        );
     }
 }
 
@@ -297,8 +299,10 @@ async fn single_stream_smol() {
             "X-Powered-By: PHP/7.1.30\r\nContent-type: text/html; charset=UTF-8\r\n\r\n1234<br \
              />\n<b>Fatal error</b>:  Uncaught Exception: TEST in"
         ));
-        assert!(String::from_utf8(stderr)
-            .unwrap()
-            .starts_with("PHP message: PHP Fatal error:  Uncaught Exception: TEST in"));
+        assert!(
+            String::from_utf8(stderr)
+                .unwrap()
+                .starts_with("PHP message: PHP Fatal error:  Uncaught Exception: TEST in")
+        );
     }
 }

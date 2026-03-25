@@ -231,7 +231,7 @@ impl<'a> Params<'a> {
     }
 }
 
-impl<'a> Default for Params<'a> {
+impl Default for Params<'_> {
     fn default() -> Self {
         Params(HashMap::new())
             .gateway_interface("FastCGI/1.0")
@@ -248,7 +248,7 @@ impl<'a> Deref for Params<'a> {
     }
 }
 
-impl<'a> DerefMut for Params<'a> {
+impl DerefMut for Params<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

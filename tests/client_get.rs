@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use fastcgi_client::{
+    Client, Params,
     conn::ShortConn,
     io::{self, AsyncRead, AsyncWrite},
     request::Request,
     response::Content,
-    Client, Params,
 };
 use std::env::current_dir;
 

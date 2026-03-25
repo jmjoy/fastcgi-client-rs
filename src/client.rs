@@ -19,13 +19,13 @@
 //! The client can execute requests and receive responses or response streams.
 
 use crate::{
+    ClientError, ClientResult, Response,
     conn::{KeepAlive, Mode, ShortConn},
     io::{self, AsyncRead, AsyncWrite, AsyncWriteExt},
     meta::{BeginRequestRec, EndRequestRec, Header, ParamPairs, RequestType, Role},
     params::Params,
     request::Request,
     response::ResponseStream,
-    ClientError, ClientResult, Response,
 };
 use std::marker::PhantomData;
 use tracing::debug;
@@ -309,8 +309,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     /// * `id` - The request ID
     /// * `params` - The request parameters
     /// * `body` - The request body stream
-    async fn handle_request<'a, I: AsyncRead + Unpin>(
-        stream: &mut S, id: u16, params: Params<'a>, mut body: I,
+    async fn handle_request<I: AsyncRead + Unpin>(
+        stream: &mut S, id: u16, params: Params<'_>, mut body: I,
     ) -> ClientResult<()> {
         Self::handle_request_start(stream, id).await?;
         Self::handle_request_params(stream, id, params).await?;
@@ -345,8 +345,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     /// * `stream` - The stream to write to
     /// * `id` - The request ID
     /// * `params` - The request parameters
-    async fn handle_request_params<'a>(
-        stream: &mut S, id: u16, params: Params<'a>,
+    async fn handle_request_params(
+        stream: &mut S, id: u16, params: Params<'_>,
     ) -> ClientResult<()> {
         let param_pairs = ParamPairs::new(params);
         debug!(id, ?param_pairs, "Params will be sent.");
@@ -477,7 +477,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
                 r#type => {
                     return Err(ClientError::UnknownRequestType {
                         request_type: r#type,
-                    })
+                    });
                 }
             }
         }

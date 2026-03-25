@@ -18,10 +18,10 @@
 extern crate test;
 
 use fastcgi_client::{
+    Client, Params,
     conn::KeepAlive,
     io::{self, AsyncRead, AsyncWrite},
     request::Request,
-    Client, Params,
 };
 use std::env::current_dir;
 use test::Bencher;

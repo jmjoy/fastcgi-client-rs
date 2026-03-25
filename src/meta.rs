@@ -18,9 +18,9 @@
 //! for parsing and generating FastCGI protocol messages.
 
 use crate::{
+    Params,
     error::{ClientError, ClientResult},
     io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    Params,
 };
 use std::{
     borrow::Cow,
@@ -468,7 +468,7 @@ impl<'a> Deref for ParamPairs<'a> {
     }
 }
 
-impl<'a> DerefMut for ParamPairs<'a> {
+impl DerefMut for ParamPairs<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
