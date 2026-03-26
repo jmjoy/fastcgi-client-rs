@@ -28,6 +28,7 @@ header:
     - '.cargo'
     - '.vscode'
     - '.idea'
+    - 'docs'
 
   comment: on-failure
 

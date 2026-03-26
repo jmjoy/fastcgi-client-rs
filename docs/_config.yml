@@ -14,8 +14,8 @@
 
 title: fastcgi-client-rs
 description: Fastcgi client implemented for Rust with optional runtime support for tokio and smol.
-baseurl: "/fastcgi-client-rs"
-url: "https://jmjoy.github.io"
+baseurl: "/"
+url: "https://jmjoy.github.io/fastcgi-client-rs"
 markdown: kramdown
 kramdown:
   input: GFM
