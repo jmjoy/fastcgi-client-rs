@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1](https://github.com/jmjoy/fastcgi-client-rs/compare/v0.10.0...v0.10.1) - 2026-03-26
+
+### Added
+
+- add initial documentation structure ([#33](https://github.com/jmjoy/fastcgi-client-rs/pull/33))
+- add examples for FastCGI client using Tokio and Smol runtimes ([#32](https://github.com/jmjoy/fastcgi-client-rs/pull/32))
+- add HTTP conversion support for FastCGI types and enhance documentation ([#31](https://github.com/jmjoy/fastcgi-client-rs/pull/31))
+
+### Other
+
+- update documentation files and remove license comments
+- update Rust edition to 2024 and dependencies to latest versions ([#30](https://github.com/jmjoy/fastcgi-client-rs/pull/30))
+- Add feature runtime-tokio and runtime-smol ([#28](https://github.com/jmjoy/fastcgi-client-rs/pull/28))
+
 ## [0.10.0](https://github.com/jmjoy/fastcgi-client-rs/compare/v0.9.0...v0.10.0) - 2025-07-15
 
 ### Added
