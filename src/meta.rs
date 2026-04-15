@@ -165,7 +165,7 @@ impl Header {
             r#type,
             request_id,
             content_length,
-            padding_length: (-(content_length as i16) & 7) as u8,
+            padding_length: (0u16.wrapping_sub(content_length) & 7) as u8,
             reserved: 0,
         }
     }
