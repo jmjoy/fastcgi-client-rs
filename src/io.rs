@@ -13,13 +13,17 @@
 // limitations under the License.
 
 //! Runtime-neutral async I/O facade used by the FastCGI client.
+//!
+//! The client is built on the `futures_io` traits, so any stream implementing
+//! them works without enabling a cargo feature. The Tokio re-exports below are
+//! only a convenience bridge for Tokio's own I/O traits.
 
 pub use std::io::{Error, ErrorKind, Result};
 
 pub use futures_io::{AsyncRead, AsyncWrite};
 pub use futures_util::io::{AsyncReadExt, AsyncWriteExt, Cursor, Empty, empty};
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 pub use tokio_util::compat::{
     Compat as TokioCompat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt,
 };

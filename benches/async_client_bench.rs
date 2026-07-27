@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![feature(test)]
-#![cfg(feature = "runtime-tokio")]
+#![cfg(feature = "tokio")]
 
 extern crate test;
 

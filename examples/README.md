@@ -19,7 +19,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example tokio_short_connection --features runtime-tokio
+   cargo run --example tokio_short_connection --features tokio
    ```
 
 2. `tokio_keep_alive`
@@ -29,7 +29,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example tokio_keep_alive --features runtime-tokio
+   cargo run --example tokio_keep_alive --features tokio
    ```
 
 3. `tokio_stream_response`
@@ -39,7 +39,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example tokio_stream_response --features runtime-tokio
+   cargo run --example tokio_stream_response --features tokio
    ```
 
 4. `smol_short_connection`
@@ -49,7 +49,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example smol_short_connection --features runtime-smol
+   cargo run --example smol_short_connection
    ```
 
 5. `smol_keep_alive`
@@ -59,7 +59,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example smol_keep_alive --features runtime-smol
+   cargo run --example smol_keep_alive
    ```
 
 6. `axum_proxy_server`
@@ -69,7 +69,7 @@ From the repository root, run the examples as follows:
    Run it with:
 
    ```shell
-   cargo run --example axum_proxy_server --features http,runtime-tokio
+   cargo run --example axum_proxy_server --features http,tokio
    ```
 
    Example manual checks:
