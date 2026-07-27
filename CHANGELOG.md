@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2](https://github.com/jmjoy/fastcgi-client-rs/compare/v0.11.1...v0.11.2) - 2026-07-27
+
+### Other
+
+- Refactor client into free functions and seal Mode trait
+- Redesign docs site with dark glassmorphism theme and full i18n support ([#39](https://github.com/jmjoy/fastcgi-client-rs/pull/39))
+- Refactor to runtime-agnostic client with tokio compat feature ([#37](https://github.com/jmjoy/fastcgi-client-rs/pull/37))
+
 ## [0.11.1](https://github.com/jmjoy/fastcgi-client-rs/compare/v0.11.0...v0.11.1) - 2026-04-15
 
 ### Fixed
