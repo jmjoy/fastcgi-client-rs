@@ -143,10 +143,11 @@ fn main() {
 With the `tokio` feature, `Client::new_tokio` and `Client::new_keep_alive_tokio`
 accept Tokio streams directly:
 
-```rust, ignore
+```rust, no_run
 use fastcgi_client::{io, Client, Params, Request};
 use tokio::net::TcpStream;
 
+# #[cfg(feature = "tokio")]
 #[tokio::main]
 async fn main() {
     // Short connection mode.
@@ -169,6 +170,7 @@ async fn main() {
         assert!(String::from_utf8(output.stdout.unwrap()).unwrap().contains("hello"));
     }
 }
+# #[cfg(not(feature = "tokio"))] fn main() {}
 ```
 
 Runnable versions of every flow, including response streaming and an Axum
