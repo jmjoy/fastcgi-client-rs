@@ -40,17 +40,15 @@ Without the `tokio` feature you can still use Tokio by bridging the stream
 yourself with [tokio-util](https://crates.io/crates/tokio-util):
 
 ```rust, no_run
-# #[cfg(feature = "tokio")]
-# async fn example() {
 use fastcgi_client::Client;
 use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-let _client = Client::new(stream.compat());
-# }
-# #[cfg(not(feature = "tokio"))]
-# fn example() {}
+#[tokio::main]
+async fn main() {
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    let _client = Client::new(stream.compat());
+}
 ```
 
 ## Examples
@@ -58,67 +56,45 @@ let _client = Client::new(stream.compat());
 Short connection mode:
 
 ```rust, no_run
-# async fn example() {
 use fastcgi_client::{io, Client, Params, Request};
 use std::env;
-use smol::net::TcpStream;
 
-    let script_filename = env::current_dir()
-        .unwrap()
-        .join("tests")
-        .join("php")
-        .join("index.php");
-    let script_filename = script_filename.to_str().unwrap();
-    let script_name = "/index.php";
+fn main() {
+    smol::block_on(async {
+        let script_filename = env::current_dir()
+            .unwrap()
+            .join("tests")
+            .join("php")
+            .join("index.php");
+        let script_filename = script_filename.to_str().unwrap();
+        let script_name = "/index.php";
 
-    // Connect to php-fpm default listening address.
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let client = Client::new(stream);
+        // Connect to php-fpm default listening address.
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        let client = Client::new(stream);
 
-    // Fastcgi params, please reference to nginx-php-fpm config.
-    let params = Params::default()
-        .request_method("GET")
-        .script_name(script_name)
-        .script_filename(script_filename)
-        .request_uri(script_name)
-        .document_uri(script_name)
-        .remote_addr("127.0.0.1")
-        .remote_port(12345)
-        .server_addr("127.0.0.1")
-        .server_port(80)
-        .server_name("jmjoy-pc")
-        .content_type("")
-        .content_length(0);
+        // Fastcgi params, please reference to nginx-php-fpm config.
+        let params = Params::default()
+            .request_method("GET")
+            .script_name(script_name)
+            .script_filename(script_filename)
+            .request_uri(script_name)
+            .document_uri(script_name)
+            .remote_addr("127.0.0.1")
+            .remote_port(12345)
+            .server_addr("127.0.0.1")
+            .server_port(80)
+            .server_name("jmjoy-pc")
+            .content_type("")
+            .content_length(0);
 
-    // Fetch fastcgi server(php-fpm) response.
-    let output = client.execute_once(Request::new(params, io::empty())).await.unwrap();
-
-    // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
-    let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
-
-    assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-    assert!(stdout.contains("hello"));
-    assert_eq!(output.stderr, None);
-# }
-```
-
-Keep alive mode:
-
-```rust, no_run
-# async fn example() {
-use fastcgi_client::{io, Client, Params, Request};
-use smol::net::TcpStream;
-
-    // Connect to php-fpm default listening address.
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new_keep_alive(stream);
-
-    // Fastcgi params, please reference to nginx-php-fpm config.
-    let params = Params::default();
-
-    for _ in (0..3) {
         // Fetch fastcgi server(php-fpm) response.
-        let output = client.execute(Request::new(params.clone(), io::empty())).await.unwrap();
+        let output = client
+            .execute_once(Request::new(params, io::empty()))
+            .await
+            .unwrap();
 
         // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
         let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
@@ -126,60 +102,78 @@ use smol::net::TcpStream;
         assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
         assert!(stdout.contains("hello"));
         assert_eq!(output.stderr, None);
-    }
-# }
+    });
+}
 ```
 
-Tokio short connection mode, using the `tokio` feature:
+Keep alive mode:
 
 ```rust, no_run
-# #[cfg(feature = "tokio")]
-# async fn example() {
+use fastcgi_client::{io, Client, Params, Request};
+
+fn main() {
+    smol::block_on(async {
+        // Connect to php-fpm default listening address.
+        let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+            .await
+            .unwrap();
+        let mut client = Client::new_keep_alive(stream);
+
+        // Fastcgi params, please reference to nginx-php-fpm config.
+        let params = Params::default();
+
+        for _ in 0..3 {
+            // Fetch fastcgi server(php-fpm) response.
+            let output = client
+                .execute(Request::new(params.clone(), io::empty()))
+                .await
+                .unwrap();
+
+            // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
+            let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
+
+            assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
+            assert!(stdout.contains("hello"));
+            assert_eq!(output.stderr, None);
+        }
+    });
+}
+```
+
+With the `tokio` feature, `Client::new_tokio` and `Client::new_keep_alive_tokio`
+accept Tokio streams directly:
+
+```rust, ignore
 use fastcgi_client::{io, Client, Params, Request};
 use tokio::net::TcpStream;
 
-    // Connect to php-fpm default listening address.
+#[tokio::main]
+async fn main() {
+    // Short connection mode.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
     let client = Client::new_tokio(stream);
+    let output = client
+        .execute_once(Request::new(Params::default(), io::empty()))
+        .await
+        .unwrap();
+    assert!(String::from_utf8(output.stdout.unwrap()).unwrap().contains("hello"));
 
-    let params = Params::default();
-
-    let output = client.execute_once(Request::new(params, io::empty())).await.unwrap();
-
-    let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
-
-    assert!(stdout.contains("hello"));
-    assert_eq!(output.stderr, None);
-# }
-# #[cfg(not(feature = "tokio"))]
-# fn example() {}
-```
-
-Tokio keep alive mode, using the `tokio` feature:
-
-```rust, no_run
-# #[cfg(feature = "tokio")]
-# async fn example() {
-use fastcgi_client::{io, Client, Params, Request};
-use tokio::net::TcpStream;
-
+    // Keep alive mode.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
     let mut client = Client::new_keep_alive_tokio(stream);
-
-    let params = Params::default();
-
-    for _ in (0..3) {
-        let output = client.execute(Request::new(params.clone(), io::empty())).await.unwrap();
-
-        let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
-
-        assert!(stdout.contains("hello"));
-        assert_eq!(output.stderr, None);
+    for _ in 0..3 {
+        let output = client
+            .execute(Request::new(Params::default(), io::empty()))
+            .await
+            .unwrap();
+        assert!(String::from_utf8(output.stdout.unwrap()).unwrap().contains("hello"));
     }
-# }
-# #[cfg(not(feature = "tokio"))]
-# fn example() {}
+}
 ```
+
+Runnable versions of every flow, including response streaming and an Axum
+HTTP-to-FastCGI proxy, live under
+[`examples/`](https://github.com/jmjoy/fastcgi-client-rs/blob/master/examples/README.md).
 
 ## Optional HTTP conversions
 
