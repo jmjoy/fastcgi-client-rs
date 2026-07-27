@@ -1,10 +1,75 @@
----
-layout: default
-title: Async FastCGI client for Rust
-description: Runtime-agnostic FastCGI client for Rust, built on futures-io. Short connection or keep-alive, streaming responses, optional Tokio and http interop.
----
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Async FastCGI client for Rust | fastcgi-client-rs</title>
+    <meta name="description" content="Runtime-agnostic FastCGI client for Rust, built on futures-io. Short connection or keep-alive, streaming responses, optional Tokio and http interop.">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#06070c">
 
-<div class="topbar-wrap">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="fastcgi-client-rs">
+    <meta property="og:title" content="Async FastCGI client for Rust | fastcgi-client-rs">
+    <meta property="og:description" content="Runtime-agnostic FastCGI client for Rust, built on futures-io. Short connection or keep-alive, streaming responses, optional Tokio and http interop.">
+    <meta property="og:url" content="http://localhost:4000/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Async FastCGI client for Rust | fastcgi-client-rs">
+    <meta name="twitter:description" content="Runtime-agnostic FastCGI client for Rust, built on futures-io. Short connection or keep-alive, streaming responses, optional Tokio and http interop.">
+
+    <link rel="canonical" href="http://localhost:4000/">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <script>
+      // Marks JS availability so scroll-reveal styles only apply when they can be undone.
+      document.documentElement.classList.add("js");
+    </script>
+
+    <!-- Syntax highlighting is progressive: if the CDN is unavailable the code
+         blocks simply render as plain monospace text. -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
+      integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      defer></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/rust.min.js"
+      integrity="sha384-h29HWMYGysZp5v7HMfLgfj7PMRyj5l0/KqKdXWYxGfcfh4GxKPNGM/Ria90QFqoZ"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      defer></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"
+      integrity="sha384-OqfnIfpOmAlErKRs2a525ZcwLuZ8Z1x8hPdIwBcMtHkJBbHnpJ6wX5/LVzASHkD5"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      defer></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/ini.min.js"
+      integrity="sha384-QrHbXsWtJOiJjnLPKgutUfoIrj34yz0+JKPw4CFIDImvaTDQ/wxYyEz/zB3639vM"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      defer></script>
+    <script src="/assets/js/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main" data-en="Skip to content" data-zh="跳到主要内容">Skip to content</a>
+
+    <div class="ambient" aria-hidden="true">
+      <span class="blob blob-1"></span>
+      <span class="blob blob-2"></span>
+      <span class="blob blob-3"></span>
+    </div>
+
+    <div class="page">
+      <div class="topbar-wrap">
   <div class="wrap">
     <header class="topbar glass">
       <a class="brand" href="#top">
@@ -101,7 +166,7 @@ description: Runtime-agnostic FastCGI client for Rust, built on futures-io. Shor
 
       <p class="install-chip reveal reveal-d3">
         <span class="prompt" aria-hidden="true">$</span>
-        <code id="code-hero-install">{% raw %}cargo add fastcgi-client{% endraw %}</code>
+        <code id="code-hero-install">cargo add fastcgi-client</code>
         <button
           class="copy-btn"
           type="button"
@@ -165,7 +230,7 @@ description: Runtime-agnostic FastCGI client for Rust, built on futures-io. Shor
                   </button>
                 </span>
               </div>
-              <pre class="code-body"><code class="language-rust" id="code-tokio">{% raw %}use fastcgi_client::{Client, Params, Request, io};
+              <pre class="code-body"><code class="language-rust" id="code-tokio">use fastcgi_client::{Client, Params, Request, io};
 use std::{error::Error, path::PathBuf};
 use tokio::net::TcpStream;
 
@@ -211,7 +276,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
     }
 
     Ok(())
-}{% endraw %}</code></pre>
+}</code></pre>
             </div>
           </div>
 
@@ -236,7 +301,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
                   </button>
                 </span>
               </div>
-              <pre class="code-body"><code class="language-rust" id="code-smol">{% raw %}use fastcgi_client::{Client, Params, Request, io};
+              <pre class="code-body"><code class="language-rust" id="code-smol">use fastcgi_client::{Client, Params, Request, io};
 use smol::net::TcpStream;
 use std::{error::Error, path::PathBuf};
 
@@ -275,7 +340,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
 
         Ok(())
     })
-}{% endraw %}</code></pre>
+}</code></pre>
             </div>
           </div>
 
@@ -300,7 +365,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
                   </button>
                 </span>
               </div>
-              <pre class="code-body"><code class="language-rust" id="code-bare">{% raw %}use fastcgi_client::{Client, Params, Request, io};
+              <pre class="code-body"><code class="language-rust" id="code-bare">use fastcgi_client::{Client, Params, Request, io};
 use futures_executor::block_on;
 
 // `MockStream` is an in-memory duplex stream that implements only the
@@ -324,7 +389,7 @@ fn main() {
         "{}",
         String::from_utf8_lossy(&output.stdout.unwrap_or_default())
     );
-}{% endraw %}</code></pre>
+}</code></pre>
             </div>
           </div>
 
@@ -349,7 +414,7 @@ fn main() {
                   </button>
                 </span>
               </div>
-              <pre class="code-body"><code class="language-rust" id="code-stream">{% raw %}use fastcgi_client::{Client, Params, Request, StreamExt, io, response::Content};
+              <pre class="code-body"><code class="language-rust" id="code-stream">use fastcgi_client::{Client, Params, Request, StreamExt, io, response::Content};
 use tokio::net::TcpStream;
 
 #[tokio::main(flavor = "current_thread")]
@@ -376,7 +441,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     }
 
     Ok(())
-}{% endraw %}</code></pre>
+}</code></pre>
             </div>
           </div>
         </div>
@@ -397,7 +462,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
                 </button>
               </span>
             </div>
-            <pre class="code-body is-compact"><code class="language-bash" id="code-install">{% raw %}# Any futures-io stream: no cargo feature
+            <pre class="code-body is-compact"><code class="language-bash" id="code-install"># Any futures-io stream: no cargo feature
 cargo add fastcgi-client
 cargo add smol
 
@@ -407,7 +472,7 @@ cargo add fastcgi-client --features tokio
 cargo add tokio --features full
 
 # Optional http &lt;-&gt; FastCGI conversions
-cargo add fastcgi-client --features http{% endraw %}</code></pre>
+cargo add fastcgi-client --features http</code></pre>
           </div>
 
           <div class="glass note-card reveal reveal-d2">
@@ -903,10 +968,10 @@ cargo add fastcgi-client --features http{% endraw %}</code></pre>
               </button>
             </span>
           </div>
-          <pre class="code-body is-compact"><code class="language-bash" id="code-docker">{% raw %}docker run --rm --name php-fpm \
+          <pre class="code-body is-compact"><code class="language-bash" id="code-docker">docker run --rm --name php-fpm \
   -v "$PWD:$PWD" -p 9000:9000 \
   php:7.1.30-fpm \
-  -c /usr/local/etc/php/php.ini-development{% endraw %}</code></pre>
+  -c /usr/local/etc/php/php.ini-development</code></pre>
         </div>
       </div>
     </div>
@@ -958,3 +1023,9 @@ cargo add fastcgi-client --features http{% endraw %}</code></pre>
     </div>
   </div>
 </footer>
+
+    </div>
+
+    <p id="live-region" class="sr-only" role="status" aria-live="polite"></p>
+  </body>
+</html>
