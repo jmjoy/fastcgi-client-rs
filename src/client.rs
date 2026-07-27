@@ -100,7 +100,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     /// This constructor is runtime agnostic: it accepts any stream implementing
     /// the [`futures_io`](crate::io) `AsyncRead` + `AsyncWrite` traits, such as
     /// `smol::net::TcpStream`, `async_net::TcpStream`, or a Tokio stream
-    /// wrapped by [`tokio_util::compat`](crate::io::TokioAsyncReadCompatExt).
+    /// wrapped by [`tokio_util::compat`](https://docs.rs/tokio-util/latest/tokio_util/compat/index.html).
     ///
     /// # Examples
     ///
@@ -158,7 +158,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, ShortConn> {
     pub async fn execute_once_stream<I: AsyncRead + Unpin>(
         mut self, request: Request<'_, I>,
     ) -> ClientResult<ResponseStream<S>> {
-        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
+        self.send_request(request).await?;
         Ok(ResponseStream::new(self.stream, REQUEST_ID))
     }
 }
@@ -209,7 +209,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     /// This constructor is runtime agnostic: it accepts any stream implementing
     /// the [`futures_io`](crate::io) `AsyncRead` + `AsyncWrite` traits, such as
     /// `smol::net::TcpStream`, `async_net::TcpStream`, or a Tokio stream
-    /// wrapped by [`tokio_util::compat`](crate::io::TokioAsyncReadCompatExt).
+    /// wrapped by [`tokio_util::compat`](https://docs.rs/tokio-util/latest/tokio_util/compat/index.html).
     ///
     /// # Examples
     ///
@@ -270,7 +270,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S, KeepAlive> {
     pub async fn execute_stream<I: AsyncRead + Unpin>(
         &mut self, request: Request<'_, I>,
     ) -> ClientResult<ResponseStream<&mut S>> {
-        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
+        self.send_request(request).await?;
         Ok(ResponseStream::new(&mut self.stream, REQUEST_ID))
     }
 }
@@ -284,187 +284,212 @@ impl<S: AsyncRead + AsyncWrite + Unpin, M: Mode> Client<S, M> {
     async fn inner_execute<I: AsyncRead + Unpin>(
         &mut self, request: Request<'_, I>,
     ) -> ClientResult<Response> {
-        Self::handle_request(&mut self.stream, REQUEST_ID, request.params, request.stdin).await?;
-        Self::handle_response(&mut self.stream, REQUEST_ID).await
+        self.send_request(request).await?;
+        handle_response(&mut self.stream, REQUEST_ID).await
     }
 
-    /// Handles the complete request process.
+    /// Sends a complete request, using the `FCGI_KEEP_CONN` flag of the
+    /// connection mode `M`.
+    ///
+    /// This is the only place where the connection mode is observed; everything
+    /// else in the protocol handling is mode agnostic.
     ///
     /// # Arguments
-    /// * `stream` - The stream to write to
-    /// * `id` - The request ID
-    /// * `params` - The request parameters
-    /// * `body` - The request body stream
-    async fn handle_request<I: AsyncRead + Unpin>(
-        stream: &mut S, id: u16, params: Params<'_>, mut body: I,
+    ///
+    /// * `request` - The request to send
+    async fn send_request<I: AsyncRead + Unpin>(
+        &mut self, request: Request<'_, I>,
     ) -> ClientResult<()> {
-        Self::handle_request_start(stream, id).await?;
-        Self::handle_request_params(stream, id, params).await?;
-        Self::handle_request_body(stream, id, &mut body).await?;
-        Self::handle_request_flush(stream).await?;
-        Ok(())
-    }
-
-    /// Handles the start of a request by sending the begin request record.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - The stream to write to
-    /// * `id` - The request ID
-    async fn handle_request_start(stream: &mut S, id: u16) -> ClientResult<()> {
-        debug!(id, "Start handle request");
-
-        let begin_request_rec =
-            BeginRequestRec::new(id, Role::Responder, <M>::is_keep_alive()).await?;
-
-        debug!(id, ?begin_request_rec, "Send to stream.");
-
-        begin_request_rec.write_to_stream(stream).await?;
-
-        Ok(())
-    }
-
-    /// Handles sending request parameters to the stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - The stream to write to
-    /// * `id` - The request ID
-    /// * `params` - The request parameters
-    async fn handle_request_params(
-        stream: &mut S, id: u16, params: Params<'_>,
-    ) -> ClientResult<()> {
-        let param_pairs = ParamPairs::new(params);
-        debug!(id, ?param_pairs, "Params will be sent.");
-
-        Header::write_to_stream_batches(
-            RequestType::Params,
-            id,
-            stream,
-            &mut &param_pairs.to_content().await?[..],
-            Some(|header| {
-                debug!(id, ?header, "Send to stream for Params.");
-                header
-            }),
+        handle_request(
+            &mut self.stream,
+            REQUEST_ID,
+            M::KEEP_CONN,
+            request.params,
+            request.stdin,
         )
-        .await?;
-
-        Header::write_to_stream_batches(
-            RequestType::Params,
-            id,
-            stream,
-            &mut io::empty(),
-            Some(|header| {
-                debug!(id, ?header, "Send to stream for Params.");
-                header
-            }),
-        )
-        .await?;
-
-        Ok(())
+        .await
     }
+}
 
-    /// Handles sending the request body to the stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - The stream to write to
-    /// * `id` - The request ID
-    /// * `body` - The request body stream
-    async fn handle_request_body<I: AsyncRead + Unpin>(
-        stream: &mut S, id: u16, body: &mut I,
-    ) -> ClientResult<()> {
-        Header::write_to_stream_batches(
-            RequestType::Stdin,
-            id,
-            stream,
-            body,
-            Some(|header| {
-                debug!(id, ?header, "Send to stream for Stdin.");
-                header
-            }),
-        )
-        .await?;
+/// Handles the complete request process.
+///
+/// # Arguments
+/// * `stream` - The stream to write to
+/// * `id` - The request ID
+/// * `keep_conn` - Value of the `FCGI_KEEP_CONN` flag
+/// * `params` - The request parameters
+/// * `body` - The request body stream
+async fn handle_request<S: AsyncWrite + Unpin, I: AsyncRead + Unpin>(
+    stream: &mut S, id: u16, keep_conn: bool, params: Params<'_>, mut body: I,
+) -> ClientResult<()> {
+    handle_request_start(stream, id, keep_conn).await?;
+    handle_request_params(stream, id, params).await?;
+    handle_request_body(stream, id, &mut body).await?;
+    handle_request_flush(stream).await?;
+    Ok(())
+}
 
-        Header::write_to_stream_batches(
-            RequestType::Stdin,
-            id,
-            stream,
-            &mut io::empty(),
-            Some(|header| {
-                debug!(id, ?header, "Send to stream for Stdin.");
-                header
-            }),
-        )
-        .await?;
+/// Handles the start of a request by sending the begin request record.
+///
+/// # Arguments
+///
+/// * `stream` - The stream to write to
+/// * `id` - The request ID
+/// * `keep_conn` - Value of the `FCGI_KEEP_CONN` flag
+async fn handle_request_start<S: AsyncWrite + Unpin>(
+    stream: &mut S, id: u16, keep_conn: bool,
+) -> ClientResult<()> {
+    debug!(id, "Start handle request");
 
-        Ok(())
-    }
+    let begin_request_rec = BeginRequestRec::new(id, Role::Responder, keep_conn).await?;
 
-    /// Flushes the stream to ensure all data is sent.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - The stream to flush
-    async fn handle_request_flush(stream: &mut S) -> ClientResult<()> {
-        stream.flush().await?;
+    debug!(id, ?begin_request_rec, "Send to stream.");
 
-        Ok(())
-    }
+    begin_request_rec.write_to_stream(stream).await?;
 
-    /// Handles reading and processing the response from the stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - The stream to read from
-    /// * `id` - The request ID to match
-    async fn handle_response(stream: &mut S, id: u16) -> ClientResult<Response> {
-        let mut response = Response::default();
+    Ok(())
+}
 
-        let mut stderr = Vec::new();
-        let mut stdout = Vec::new();
+/// Handles sending request parameters to the stream.
+///
+/// # Arguments
+///
+/// * `stream` - The stream to write to
+/// * `id` - The request ID
+/// * `params` - The request parameters
+async fn handle_request_params<S: AsyncWrite + Unpin>(
+    stream: &mut S, id: u16, params: Params<'_>,
+) -> ClientResult<()> {
+    let param_pairs = ParamPairs::new(params);
+    debug!(id, ?param_pairs, "Params will be sent.");
 
-        loop {
-            let header = Header::new_from_stream(stream).await?;
-            if header.request_id != id {
-                return Err(ClientError::ResponseNotFound { id });
+    Header::write_to_stream_batches(
+        RequestType::Params,
+        id,
+        stream,
+        &mut &param_pairs.to_content().await?[..],
+        Some(|header| {
+            debug!(id, ?header, "Send to stream for Params.");
+            header
+        }),
+    )
+    .await?;
+
+    Header::write_to_stream_batches(
+        RequestType::Params,
+        id,
+        stream,
+        &mut io::empty(),
+        Some(|header| {
+            debug!(id, ?header, "Send to stream for Params.");
+            header
+        }),
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Handles sending the request body to the stream.
+///
+/// # Arguments
+///
+/// * `stream` - The stream to write to
+/// * `id` - The request ID
+/// * `body` - The request body stream
+async fn handle_request_body<S: AsyncWrite + Unpin, I: AsyncRead + Unpin>(
+    stream: &mut S, id: u16, body: &mut I,
+) -> ClientResult<()> {
+    Header::write_to_stream_batches(
+        RequestType::Stdin,
+        id,
+        stream,
+        body,
+        Some(|header| {
+            debug!(id, ?header, "Send to stream for Stdin.");
+            header
+        }),
+    )
+    .await?;
+
+    Header::write_to_stream_batches(
+        RequestType::Stdin,
+        id,
+        stream,
+        &mut io::empty(),
+        Some(|header| {
+            debug!(id, ?header, "Send to stream for Stdin.");
+            header
+        }),
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Flushes the stream to ensure all data is sent.
+///
+/// # Arguments
+///
+/// * `stream` - The stream to flush
+async fn handle_request_flush<S: AsyncWrite + Unpin>(stream: &mut S) -> ClientResult<()> {
+    stream.flush().await?;
+
+    Ok(())
+}
+
+/// Handles reading and processing the response from the stream.
+///
+/// # Arguments
+///
+/// * `stream` - The stream to read from
+/// * `id` - The request ID to match
+async fn handle_response<S: AsyncRead + Unpin>(stream: &mut S, id: u16) -> ClientResult<Response> {
+    let mut response = Response::default();
+
+    let mut stderr = Vec::new();
+    let mut stdout = Vec::new();
+
+    loop {
+        let header = Header::new_from_stream(stream).await?;
+        if header.request_id != id {
+            return Err(ClientError::ResponseNotFound { id });
+        }
+        debug!(id, ?header, "Receive from stream.");
+
+        match header.r#type {
+            RequestType::Stdout => {
+                stdout.extend(header.read_content_from_stream(stream).await?);
             }
-            debug!(id, ?header, "Receive from stream.");
+            RequestType::Stderr => {
+                stderr.extend(header.read_content_from_stream(stream).await?);
+            }
+            RequestType::EndRequest => {
+                let end_request_rec = EndRequestRec::from_header(&header, stream).await?;
+                debug!(id, ?end_request_rec, "Receive from stream.");
 
-            match header.r#type {
-                RequestType::Stdout => {
-                    stdout.extend(header.read_content_from_stream(stream).await?);
-                }
-                RequestType::Stderr => {
-                    stderr.extend(header.read_content_from_stream(stream).await?);
-                }
-                RequestType::EndRequest => {
-                    let end_request_rec = EndRequestRec::from_header(&header, stream).await?;
-                    debug!(id, ?end_request_rec, "Receive from stream.");
+                end_request_rec
+                    .end_request
+                    .protocol_status
+                    .convert_to_client_result(end_request_rec.end_request.app_status)?;
 
-                    end_request_rec
-                        .end_request
-                        .protocol_status
-                        .convert_to_client_result(end_request_rec.end_request.app_status)?;
+                response.stdout = if stdout.is_empty() {
+                    None
+                } else {
+                    Some(stdout)
+                };
+                response.stderr = if stderr.is_empty() {
+                    None
+                } else {
+                    Some(stderr)
+                };
 
-                    response.stdout = if stdout.is_empty() {
-                        None
-                    } else {
-                        Some(stdout)
-                    };
-                    response.stderr = if stderr.is_empty() {
-                        None
-                    } else {
-                        Some(stderr)
-                    };
-
-                    return Ok(response);
-                }
-                r#type => {
-                    return Err(ClientError::UnknownRequestType {
-                        request_type: r#type,
-                    });
-                }
+                return Ok(response);
+            }
+            r#type => {
+                return Err(ClientError::UnknownRequestType {
+                    request_type: r#type,
+                });
             }
         }
     }
