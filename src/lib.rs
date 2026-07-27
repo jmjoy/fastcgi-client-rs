@@ -17,9 +17,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-#[cfg(not(any(feature = "runtime-tokio", feature = "runtime-smol")))]
-compile_error!("Enable at least one runtime feature: `runtime-tokio` or `runtime-smol`.");
-
 pub mod client;
 pub mod conn;
 mod error;

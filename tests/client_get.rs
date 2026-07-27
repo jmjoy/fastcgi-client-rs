@@ -25,7 +25,7 @@ use futures_util::stream::StreamExt;
 
 mod common;
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_tokio() {
     common::setup();
@@ -36,7 +36,21 @@ async fn test_tokio() {
     test_client(Client::new_tokio(stream)).await;
 }
 
-#[cfg(feature = "runtime-smol")]
+/// Bridges a Tokio stream by hand and uses the runtime agnostic constructor,
+/// which is the documented path for users who do not enable the `tokio`
+/// feature.
+#[cfg(feature = "tokio")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_tokio_manual_compat() {
+    common::setup();
+
+    use fastcgi_client::io::TokioAsyncReadCompatExt;
+    use tokio::net::TcpStream;
+
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    test_client(Client::new(stream.compat())).await;
+}
+
 #[test]
 fn test_smol() {
     common::setup();
@@ -45,7 +59,7 @@ fn test_smol() {
         let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
             .await
             .unwrap();
-        test_client(Client::new_smol(stream)).await;
+        test_client(Client::new(stream)).await;
     });
 }
 
@@ -86,7 +100,7 @@ async fn test_client<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S, ShortC
     assert_eq!(output.stderr, None);
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_stream_tokio() {
     common::setup();
@@ -97,7 +111,6 @@ async fn test_stream_tokio() {
     test_client_stream(Client::new_tokio(stream)).await;
 }
 
-#[cfg(feature = "runtime-smol")]
 #[test]
 fn test_stream_smol() {
     common::setup();
@@ -106,7 +119,7 @@ fn test_stream_smol() {
         let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
             .await
             .unwrap();
-        test_client_stream(Client::new_smol(stream)).await;
+        test_client_stream(Client::new(stream)).await;
     });
 }
 
@@ -159,7 +172,7 @@ async fn test_client_stream<S: AsyncRead + AsyncWrite + Unpin>(client: Client<S,
     );
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_big_response_stream_tokio() {
     common::setup();
@@ -170,7 +183,6 @@ async fn test_big_response_stream_tokio() {
     test_client_big_response_stream(Client::new_tokio(stream)).await;
 }
 
-#[cfg(feature = "runtime-smol")]
 #[test]
 fn test_big_response_stream_smol() {
     common::setup();
@@ -179,7 +191,7 @@ fn test_big_response_stream_smol() {
         let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
             .await
             .unwrap();
-        test_client_big_response_stream(Client::new_smol(stream)).await;
+        test_client_big_response_stream(Client::new(stream)).await;
     });
 }
 

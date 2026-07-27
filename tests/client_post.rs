@@ -17,7 +17,7 @@ use std::env::current_dir;
 
 mod common;
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn post_big_body_tokio() {
     common::setup();
@@ -68,7 +68,6 @@ async fn post_big_body_tokio() {
     assert!(stdout.contains("131072"));
 }
 
-#[cfg(feature = "runtime-smol")]
 #[test]
 fn post_big_body_smol() {
     common::setup();
@@ -77,7 +76,7 @@ fn post_big_body_smol() {
         let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
             .await
             .unwrap();
-        let mut client = Client::new_keep_alive_smol(stream);
+        let mut client = Client::new_keep_alive(stream);
 
         let document_root = current_dir().unwrap().join("tests").join("php");
         let document_root = document_root.to_str().unwrap();

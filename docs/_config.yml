@@ -13,7 +13,7 @@
 # limitations under the License.
 
 title: fastcgi-client-rs
-description: Fastcgi client implemented for Rust with optional runtime support for tokio and smol.
+description: Runtime-agnostic Fastcgi client implemented for Rust, with an optional tokio compatibility adapter.
 baseurl: "/"
 url: "https://jmjoy.github.io/fastcgi-client-rs"
 markdown: kramdown

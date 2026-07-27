@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Async FastCGI for Rust
-description: Fastcgi client implemented for Rust with optional runtime support for tokio and smol.
+description: Runtime-agnostic Fastcgi client implemented for Rust, with an optional tokio compatibility adapter.
 ---
 
 <main class="site">
@@ -28,7 +28,7 @@ description: Fastcgi client implemented for Rust with optional runtime support f
       <div class="eyebrow">Rust crate for php-fpm and FastCGI backends</div>
       <h1>Connect async Rust services to FastCGI without ceremony.</h1>
       <p>
-        Fastcgi client implemented for Rust with optional runtime support for tokio and smol.
+        Runtime-agnostic Fastcgi client implemented for Rust, built on the futures-io traits.
         Use it for direct php-fpm calls, connection reuse, streaming responses, or HTTP-to-FastCGI proxying.
       </p>
       <div class="cta-row">
@@ -37,7 +37,7 @@ description: Fastcgi client implemented for Rust with optional runtime support f
         <a class="button-secondary" href="https://crates.io/crates/fastcgi-client">View on crates.io</a>
       </div>
       <div class="meta-row">
-        <span class="pill">Tokio or Smol</span>
+        <span class="pill">Any async runtime, or none</span>
         <span class="pill">Short connection or keep-alive</span>
         <span class="pill">Optional HTTP conversions</span>
       </div>
@@ -45,19 +45,19 @@ description: Fastcgi client implemented for Rust with optional runtime support f
 
     <aside class="panel hero-side">
       <section class="code-card">
-        <header>Install with explicit runtime features</header>
-        <pre><code>cargo add fastcgi-client --features runtime-tokio
-cargo add tokio --features full
+        <header>Install without any feature</header>
+        <pre><code>cargo add fastcgi-client
+cargo add smol
 
-# or
+# Tokio needs a compat wrapper, so it has an optional feature
 
-cargo add fastcgi-client --features runtime-smol
-cargo add smol</code></pre>
+cargo add fastcgi-client --features tokio
+cargo add tokio --features full</code></pre>
       </section>
       <section class="fact-card">
         <div class="mini-label">Why this crate</div>
         <ul>
-          <li>Unified async I/O model with runtime-specific adapters.</li>
+          <li>Built on <code>futures-io</code>: no task spawning, timers or socket creation.</li>
           <li>Minimal request building through <code>Params</code> and <code>Request</code>.</li>
           <li>Examples cover direct requests, keep-alive reuse, streaming, and Axum proxying.</li>
         </ul>
@@ -68,10 +68,11 @@ cargo add smol</code></pre>
   <section class="section-grid" id="features">
     <article class="panel section-card">
       <div class="mini-label">Runtime support</div>
-      <h3>Choose Tokio, Smol, or both.</h3>
+      <h3>Bring your own runtime, or none at all.</h3>
       <p>
-        Runtime support is feature-gated. Enable <code>runtime-tokio</code>, <code>runtime-smol</code>, or both,
-        depending on the executor already used by your service.
+        The client only needs a stream implementing the <code>futures-io</code> traits, so smol, async-net and
+        friends work with no cargo feature. Tokio defines its own I/O traits, so the optional <code>tokio</code>
+        feature adds convenience constructors that apply the <code>tokio-util</code> compat wrapper for you.
       </p>
     </article>
     <article class="panel section-card">
@@ -101,7 +102,7 @@ cargo add smol</code></pre>
         you already configure in web servers such as nginx.
       </p>
       <div class="install-block">
-        <pre><code>cargo add fastcgi-client --features runtime-tokio
+        <pre><code>cargo add fastcgi-client --features tokio
 cargo add tokio --features full</code></pre>
       </div>
       <div class="snippet">

@@ -4,46 +4,62 @@
 [![Crate](https://img.shields.io/crates/v/fastcgi-client.svg)](https://crates.io/crates/fastcgi-client)
 [![API](https://docs.rs/fastcgi-client/badge.svg)](https://docs.rs/fastcgi-client)
 
-Fastcgi client implemented for Rust with optional runtime support for
-[tokio](https://crates.io/crates/tokio) and [smol](https://crates.io/crates/smol).
+Runtime-agnostic Fastcgi client implemented for Rust.
+
+The client is built on the [futures-io](https://crates.io/crates/futures-io)
+`AsyncRead` / `AsyncWrite` traits and contains no task spawning, timers or
+socket creation, so it works with any async runtime, and even with no runtime at
+all.
 
 ## Installation
 
-Choose one or both runtime features explicitly:
-
-Tokio:
+No cargo feature is required:
 
 ```shell
-cargo add fastcgi-client --features runtime-tokio
-cargo add tokio --features full
+cargo add fastcgi-client
 ```
 
-Smol:
+Any stream implementing the `futures-io` traits works out of the box, for
+example [smol](https://crates.io/crates/smol) or
+[async-net](https://crates.io/crates/async-net):
 
 ```shell
-cargo add fastcgi-client --features runtime-smol
 cargo add smol
 ```
 
-Both runtimes:
+Tokio defines its own I/O traits, so its streams need a compatibility wrapper.
+Enable the optional `tokio` feature to get convenience constructors that do the
+wrapping for you:
 
 ```shell
-cargo add fastcgi-client --features runtime-tokio,runtime-smol
+cargo add fastcgi-client --features tokio
 cargo add tokio --features full
-cargo add smol
+```
+
+Without the `tokio` feature you can still use Tokio by bridging the stream
+yourself with [tokio-util](https://crates.io/crates/tokio-util):
+
+```rust, no_run
+use fastcgi_client::Client;
+use tokio::net::TcpStream;
+use tokio_util::compat::TokioAsyncReadCompatExt;
+
+#[tokio::main]
+async fn main() {
+    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
+    let _client = Client::new(stream.compat());
+}
 ```
 
 ## Examples
 
-Tokio short connection mode:
+Short connection mode:
 
 ```rust, no_run
-# #[cfg(feature = "runtime-tokio")]
-# async fn example() {
 use fastcgi_client::{io, Client, Params, Request};
 use std::env;
-use tokio::net::TcpStream;
 
+smol::block_on(async {
     let script_filename = env::current_dir()
         .unwrap()
         .join("tests")
@@ -53,8 +69,10 @@ use tokio::net::TcpStream;
     let script_name = "/index.php";
 
     // Connect to php-fpm default listening address.
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let client = Client::new_tokio(stream);
+    let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+        .await
+        .unwrap();
+    let client = Client::new(stream);
 
     // Fastcgi params, please reference to nginx-php-fpm config.
     let params = Params::default()
@@ -72,7 +90,10 @@ use tokio::net::TcpStream;
         .content_length(0);
 
     // Fetch fastcgi server(php-fpm) response.
-    let output = client.execute_once(Request::new(params, io::empty())).await.unwrap();
+    let output = client
+        .execute_once(Request::new(params, io::empty()))
+        .await
+        .unwrap();
 
     // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
     let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
@@ -80,29 +101,30 @@ use tokio::net::TcpStream;
     assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
     assert!(stdout.contains("hello"));
     assert_eq!(output.stderr, None);
-}
-# #[cfg(not(feature = "runtime-tokio"))]
-# fn example() {}
+});
 ```
 
-Tokio keep alive mode:
+Keep alive mode:
 
 ```rust, no_run
-# #[cfg(feature = "runtime-tokio")]
-# async fn example() {
 use fastcgi_client::{io, Client, Params, Request};
-use tokio::net::TcpStream;
 
+smol::block_on(async {
     // Connect to php-fpm default listening address.
-    let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new_keep_alive_tokio(stream);
+    let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
+        .await
+        .unwrap();
+    let mut client = Client::new_keep_alive(stream);
 
     // Fastcgi params, please reference to nginx-php-fpm config.
     let params = Params::default();
 
-    for _ in (0..3) {
+    for _ in 0..3 {
         // Fetch fastcgi server(php-fpm) response.
-        let output = client.execute(Request::new(params.clone(), io::empty())).await.unwrap();
+        let output = client
+            .execute(Request::new(params.clone(), io::empty()))
+            .await
+            .unwrap();
 
         // "Content-type: text/html; charset=UTF-8\r\n\r\nhello"
         let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
@@ -111,83 +133,45 @@ use tokio::net::TcpStream;
         assert!(stdout.contains("hello"));
         assert_eq!(output.stderr, None);
     }
-}
-# #[cfg(not(feature = "runtime-tokio"))]
-# fn example() {}
+});
 ```
 
-Smol short connection mode:
+With the `tokio` feature, `Client::new_tokio` and `Client::new_keep_alive_tokio`
+accept Tokio streams directly:
 
 ```rust, no_run
-# #[cfg(feature = "runtime-smol")]
-# async fn example() {
 use fastcgi_client::{io, Client, Params, Request};
-use std::env;
-use smol::net::TcpStream;
+use tokio::net::TcpStream;
 
-    let script_filename = env::current_dir()
-        .unwrap()
-        .join("tests")
-        .join("php")
-        .join("index.php");
-    let script_filename = script_filename.to_str().unwrap();
-    let script_name = "/index.php";
-
+# #[cfg(feature = "tokio")]
+#[tokio::main]
+async fn main() {
+    // Short connection mode.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let client = Client::new_smol(stream);
+    let client = Client::new_tokio(stream);
+    let output = client
+        .execute_once(Request::new(Params::default(), io::empty()))
+        .await
+        .unwrap();
+    assert!(String::from_utf8(output.stdout.unwrap()).unwrap().contains("hello"));
 
-    let params = Params::default()
-        .request_method("GET")
-        .script_name(script_name)
-        .script_filename(script_filename)
-        .request_uri(script_name)
-        .document_uri(script_name)
-        .remote_addr("127.0.0.1")
-        .remote_port(12345)
-        .server_addr("127.0.0.1")
-        .server_port(80)
-        .server_name("jmjoy-pc")
-        .content_type("")
-        .content_length(0);
-
-    let output = client.execute_once(Request::new(params, io::empty())).await.unwrap();
-
-    let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
-
-    assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-    assert!(stdout.contains("hello"));
-    assert_eq!(output.stderr, None);
-}
-# #[cfg(not(feature = "runtime-smol"))]
-# fn example() {}
-```
-
-Smol keep alive mode:
-
-```rust, no_run
-# #[cfg(feature = "runtime-smol")]
-# async fn example() {
-use fastcgi_client::{io, Client, Params, Request};
-use smol::net::TcpStream;
-
+    // Keep alive mode.
     let stream = TcpStream::connect(("127.0.0.1", 9000)).await.unwrap();
-    let mut client = Client::new_keep_alive_smol(stream);
-
-    let params = Params::default();
-
-    for _ in (0..3) {
-        let output = client.execute(Request::new(params.clone(), io::empty())).await.unwrap();
-
-        let stdout = String::from_utf8(output.stdout.unwrap()).unwrap();
-
-        assert!(stdout.contains("Content-type: text/html; charset=UTF-8"));
-        assert!(stdout.contains("hello"));
-        assert_eq!(output.stderr, None);
+    let mut client = Client::new_keep_alive_tokio(stream);
+    for _ in 0..3 {
+        let output = client
+            .execute(Request::new(Params::default(), io::empty()))
+            .await
+            .unwrap();
+        assert!(String::from_utf8(output.stdout.unwrap()).unwrap().contains("hello"));
     }
 }
-# #[cfg(not(feature = "runtime-smol"))]
-# fn example() {}
+# #[cfg(not(feature = "tokio"))] fn main() {}
 ```
+
+Runnable versions of every flow, including response streaming and an Axum
+HTTP-to-FastCGI proxy, live under
+[`examples/`](https://github.com/jmjoy/fastcgi-client-rs/blob/master/examples/README.md).
 
 ## Optional HTTP conversions
 
@@ -195,7 +179,7 @@ Enable the `http` feature if you want to convert between this crate's FastCGI
 types and the `http` crate.
 
 ```toml
-fastcgi-client = { version = "0.10", features = ["http", "runtime-tokio"] }
+fastcgi-client = { version = "0.12", features = ["http"] }
 ```
 
 The conversion boundary is intentionally split in two:

@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let script_name = "/index.php";
 
         let stream = TcpStream::connect(("127.0.0.1", 9000)).await?;
-        let client = Client::new_smol(stream);
+        let client = Client::new(stream);
 
         let params = Params::default()
             .request_method("GET")

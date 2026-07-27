@@ -25,7 +25,7 @@ use crate::{Params, io::AsyncRead};
 #[cfg(feature = "http")]
 use crate::{HttpConversionError, HttpConversionResult};
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 use crate::io::{TokioAsyncReadCompatExt, TokioCompat};
 
 /// FastCGI request containing parameters and stdin data.
@@ -117,25 +117,18 @@ where
     }
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 impl<'a, I> Request<'a, TokioCompat<I>>
 where
     I: tokio::io::AsyncRead + Unpin,
 {
     /// Creates a new FastCGI request from a Tokio reader.
+    ///
+    /// Requires the optional `tokio` feature; it merely wraps the reader with
+    /// [`tokio_util::compat`](crate::io::TokioAsyncReadCompatExt) before
+    /// delegating to [`Request::new`].
     pub fn new_tokio(params: Params<'a>, stdin: I) -> Self {
         Self::new(params, stdin.compat())
-    }
-}
-
-#[cfg(feature = "runtime-smol")]
-impl<'a, I> Request<'a, I>
-where
-    I: AsyncRead + Unpin,
-{
-    /// Creates a new FastCGI request from a Smol-compatible reader.
-    pub fn new_smol(params: Params<'a>, stdin: I) -> Self {
-        Self::new(params, stdin)
     }
 }
 

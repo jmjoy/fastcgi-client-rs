@@ -19,7 +19,7 @@ use futures_util::stream::StreamExt;
 
 mod common;
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn multi_tokio() {
     common::setup();
@@ -30,7 +30,6 @@ async fn multi_tokio() {
     }
 }
 
-#[cfg(feature = "runtime-smol")]
 #[test]
 fn multi_smol() {
     common::setup();
@@ -45,7 +44,7 @@ fn multi_smol() {
     });
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 async fn single() {
     use tokio::net::TcpStream;
 
@@ -95,12 +94,11 @@ async fn single() {
     }
 }
 
-#[cfg(feature = "runtime-smol")]
 async fn single_smol() {
     let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
         .await
         .unwrap();
-    let mut client = Client::new_keep_alive_smol(stream);
+    let mut client = Client::new_keep_alive(stream);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
@@ -145,7 +143,7 @@ async fn single_smol() {
     }
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn multi_stream_tokio() {
     common::setup();
@@ -158,7 +156,6 @@ async fn multi_stream_tokio() {
     }
 }
 
-#[cfg(feature = "runtime-smol")]
 #[test]
 fn multi_stream_smol() {
     common::setup();
@@ -173,7 +170,7 @@ fn multi_stream_smol() {
     });
 }
 
-#[cfg(feature = "runtime-tokio")]
+#[cfg(feature = "tokio")]
 async fn single_stream() {
     use tokio::net::TcpStream;
 
@@ -240,12 +237,11 @@ async fn single_stream() {
     }
 }
 
-#[cfg(feature = "runtime-smol")]
 async fn single_stream_smol() {
     let stream = smol::net::TcpStream::connect(("127.0.0.1", 9000))
         .await
         .unwrap();
-    let mut client = Client::new_keep_alive_smol(stream);
+    let mut client = Client::new_keep_alive(stream);
 
     let document_root = current_dir().unwrap().join("tests").join("php");
     let document_root = document_root.to_str().unwrap();
